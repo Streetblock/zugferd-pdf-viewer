@@ -1,4 +1,4 @@
-class PDFAttachmentExtractor {
+window.PDFAttachmentExtractor = class PDFAttachmentExtractor {
     async extractXML(file) {
         const arrayBuffer = await file.arrayBuffer();
         const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
@@ -29,9 +29,9 @@ class PDFAttachmentExtractor {
             content: xmlString
         };
     }
-}
+};
 
-class InvoiceXMLParser {
+window.InvoiceXMLParser = class InvoiceXMLParser {
     constructor(xmlString) {
         const parser = new DOMParser();
         this.xmlDoc = parser.parseFromString(xmlString, "text/xml");
@@ -342,4 +342,4 @@ class InvoiceXMLParser {
 
         return data;
     }
-}
+};
