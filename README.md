@@ -1,21 +1,32 @@
 # ZUGFeRD Viewer
 
-Kleiner lokaler Viewer zum Laden einer ZUGFeRD-/PDF-A-3-Rechnung, Extrahieren des XML-Anhangs und Anzeigen der wichtigsten Rechnungsdaten im Browser.
+Ein kleiner, rein browserbasierter Viewer für ZUGFeRD- und PDF/A-3-Rechnungen.
+Die App liest den eingebetteten XML-Anhang aus und zeigt die wichtigsten Rechnungsdaten direkt im Browser an.
 
-## Start
+## Live Demo
+
+- GitHub Pages: https://streetblock.github.io/zugferd-pdf-viewer/
+- Repository: https://github.com/Streetblock/zugferd-pdf-viewer
+
+## Features
+
+- Drag-and-drop für PDF-Dateien
+- Extraktion des XML-Anhangs direkt im Browser
+- Anzeige von Rechnungsnummer, Datum, Betrag, Verkäufer, Käufer, Zahlungsdaten und Steuerinfos
+- Keine Server-Komponente nötig
+- Aufgeteilt in `index.html`, `style.css`, `app.js` und `src/lib.js`
+
+## Lokaler Start
 
 Einfach `index.html` im Browser öffnen.
 
-Die App nutzt:
-
-- `PDF.js` für den PDF-Anhang
-- `app.js` für die UI
-- `src/lib.js` für PDF- und XML-Logik
-- `style.css` für das Styling
-
 ## Projektstruktur
 
-- `index.html` - Shell der Anwendung
-- `style.css` - Styles
-- `app.js` - UI-Controller
-- `src/lib.js` - Extraktion und Parsing
+- `index.html` - HTML-Shell der Anwendung
+- `style.css` - Styling
+- `app.js` - UI-Controller und Rendering
+- `src/lib.js` - PDF- und XML-Logik
+
+## Hinweis
+
+Der Viewer läuft komplett clientseitig. Die PDF bleibt lokal im Browser und wird nicht an einen Server hochgeladen.
