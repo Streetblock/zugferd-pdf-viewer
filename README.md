@@ -1,5 +1,7 @@
 # ZUGFeRD Viewer
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-open-2ea44f)](https://streetblock.github.io/zugferd-pdf-viewer/)
+
 Ein kleiner, rein browserbasierter Viewer für ZUGFeRD- und PDF/A-3-Rechnungen.
 Die App liest den eingebetteten XML-Anhang aus und zeigt die wichtigsten Rechnungsdaten direkt im Browser an.
 
