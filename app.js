@@ -55,9 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             this.copyPaymentPayloadButton.addEventListener("click", async () => {
-                if (!this.currentPaymentPayload) {
-                    return;
-                }
+                if (!this.currentPaymentPayload) return;
 
                 try {
                     await navigator.clipboard.writeText(this.currentPaymentPayload);
@@ -118,14 +116,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 "20": "Scheck",
                 "30": "Überweisung",
                 "48": "Kartenzahlung",
-                "49": "Lastschrift"
+                "49": "Lastschrift",
+                "58": "SEPA-Überweisung",
+                "59": "SEPA-Lastschrift"
             };
 
             const formatPaymentMeans = (code) => {
                 const normalized = String(code || "").trim();
-                if (!normalized || normalized === "Unbekannt") {
-                    return "Unbekannt";
-                }
+                if (!normalized || normalized === "Unbekannt") return "Unbekannt";
                 const label = paymentMeansLabels[normalized];
                 return label ? `${label} (${normalized})` : `Code ${normalized}`;
             };
@@ -158,12 +156,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         renderPaymentSection(data) {
             const paymentMeansCode = String(data.paymentMeans || "").trim();
-            const normalizedPaymentMeans = paymentMeansCode.toLowerCase();
-            const isCashPayment = paymentMeansCode === "10" || normalizedPaymentMeans === "bar" || normalizedPaymentMeans === "cash";
+            const isEligibleCode = paymentMeansCode === "30" || paymentMeansCode === "58";
             const hasIban = Boolean(data.iban && data.iban !== "Unbekannt");
             const hasAmount = Boolean(data.totalAmount && data.totalAmount !== "0.00");
             const isEuro = data.currency === "EUR";
-            const canCreatePayload = !isCashPayment && hasIban && hasAmount && isEuro && typeof EpcQrPayload?.create === "function";
+            const canCreatePayload = isEligibleCode && hasIban && hasAmount && isEuro && typeof EpcQrPayload?.create === "function";
 
             if (!canCreatePayload) {
                 this.paymentPanel.classList.add("hidden");
@@ -171,8 +168,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 this.paymentPayload.value = "";
                 this.paymentQr.innerHTML = "";
 
-                if (isCashPayment) {
+                if (paymentMeansCode === "10") {
                     this.paymentNote.textContent = "Barzahlung erkannt: Kein EPC-QR-Code, weil dafür eine Banküberweisung gedacht ist.";
+                } else if (!isEligibleCode) {
+                    this.paymentNote.textContent = `Zahlungsart ${paymentMeansCode || "Unbekannt"}: Kein EPC-QR-Code, weil nur Überweisung (30) und SEPA-Überweisung (58) unterstützt werden.`;
                 } else if (!isEuro) {
                     this.paymentNote.textContent = "Kein EPC-QR-Code, weil der Standard nur für EUR-Rechnungen gedacht ist.";
                 } else if (!hasIban) {
@@ -189,7 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const paymentData = {
                 name: data.sellerName,
                 iban: data.iban,
-                bic: data.bic,
+                bic: data.bic && data.bic !== "Unbekannt" ? data.bic : "",
                 amount: data.totalAmount,
                 invoiceNumber: data.invoiceNumber,
                 remittanceText: data.invoiceNumber && data.invoiceNumber !== "Unbekannt"
