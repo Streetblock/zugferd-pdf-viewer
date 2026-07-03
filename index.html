@@ -10,8 +10,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="src/lib.js" defer></script>
-    <script src="app.js" defer></script>
+    <script src="src/lib.js"></script>
+    <script type="module" src="app.js"></script>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-start p-2 md:p-4 overflow-auto">
     <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col">
@@ -136,6 +136,49 @@
                             <p><span class="font-semibold">Positionen:</span> <span id="val-line-count">-</span></p>
                         </div>
                     </div>
+                </div>
+
+                <div id="payment-panel" class="hidden bg-emerald-50 p-4 md:p-5 rounded-xl border border-emerald-100">
+                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                            <p class="text-emerald-600 text-xs font-bold uppercase">EPC-Zahlung</p>
+                            <h4 class="text-lg md:text-xl font-bold text-gray-800 mt-1">SEPA-QR-Code für die Banking-App</h4>
+                            <p id="payment-summary" class="text-sm text-gray-600 mt-1">-</p>
+                        </div>
+                        <button id="copy-payment-payload" type="button" class="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700">
+                            QR-Daten kopieren
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-3 md:gap-4 mt-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 text-sm">
+                            <div class="bg-white/70 rounded-lg p-3 border border-emerald-100">
+                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">Empfänger</p>
+                                <p id="payment-recipient" class="text-gray-700 break-words">-</p>
+                            </div>
+                            <div class="bg-white/70 rounded-lg p-3 border border-emerald-100">
+                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">Verwendungszweck</p>
+                                <p id="payment-reference" class="text-gray-700 break-words">-</p>
+                            </div>
+                            <div class="bg-white/70 rounded-lg p-3 border border-emerald-100">
+                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">IBAN</p>
+                                <p id="payment-iban" class="font-mono text-gray-700 break-all">-</p>
+                            </div>
+                            <div class="bg-white/70 rounded-lg p-3 border border-emerald-100">
+                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">Betrag</p>
+                                <p id="payment-amount" class="text-gray-700">-</p>
+                            </div>
+                        </div>
+                        <div class="bg-white/70 rounded-xl border border-emerald-100 p-3 flex items-center justify-center min-h-[280px]">
+                            <div id="payment-qr" class="w-full flex items-center justify-center"></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <label for="payment-payload" class="block text-xs font-bold uppercase text-gray-400 mb-2">EPC Payload</label>
+                        <textarea id="payment-payload" readonly rows="6" class="w-full rounded-lg border border-emerald-100 bg-white/80 p-3 font-mono text-xs text-gray-700 shadow-inner focus:outline-none"></textarea>
+                    </div>
+                    <p id="payment-note" class="mt-2 text-xs text-gray-500"></p>
                 </div>
 
                 <div class="mt-4 pt-4 border-t border-gray-200">
