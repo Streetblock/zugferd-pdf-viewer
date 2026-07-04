@@ -288,6 +288,28 @@ document.addEventListener("DOMContentLoaded", () => {
                 `;
             };
 
+            const renderDetailFields = (id, fields) => {
+                const element = document.getElementById(id);
+                const normalizedFields = fields
+                    .map((field) => ({
+                        label: field.label,
+                        value: field.showUnknown
+                            ? (String(field.value ?? "").trim() || "Unbekannt")
+                            : cleanValue(field.value),
+                        multiline: Boolean(field.multiline)
+                    }))
+                    .filter((field) => field.value || field.showUnknown);
+
+                element.innerHTML = normalizedFields.length
+                    ? normalizedFields.map(({ label, value, multiline }) => `
+                        <div>
+                            <p class="text-xs font-bold uppercase text-gray-400 mb-1">${escapeHtml(label)}</p>
+                            <p class="${multiline ? "whitespace-pre-line" : ""} text-gray-700 ${multiline ? "" : "break-words"}">${escapeHtml(value)}</p>
+                        </div>
+                    `).join("")
+                    : `<p class="text-sm text-gray-500">Keine weiteren Angaben vorhanden.</p>`;
+            };
+
             setText("val-inv-number", data.invoiceNumber);
             setText("val-date", data.issueDate);
             setText("val-total", `${data.totalAmount} ${data.currency}`);
@@ -303,8 +325,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 { label: "USt-Id", value: data.buyerVatId },
                 { label: "Adresse", value: data.buyerAddress, multiline: true }
             ]);
-            setText("val-seller-tax-reference", data.sellerTaxReference);
-            setText("val-seller-communication-id", data.sellerCommunicationId);
+            renderDetailFields("val-seller-details", [
+                { label: "USt-Id", value: data.sellerVatId },
+                { label: "Weitere Steuerkennung", value: data.sellerTaxReference },
+                { label: "Kommunikations-ID", value: data.sellerCommunicationId }
+            ]);
+            renderDetailFields("val-buyer-details", [
+                { label: "USt-Id", value: data.buyerVatId, showUnknown: true }
+            ]);
             setText("val-buyer-reference", data.buyerReference);
             setText("val-payment-means", formatPaymentMeans(data.paymentMeans));
             setText("val-due-date", data.dueDate);
