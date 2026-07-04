@@ -435,6 +435,119 @@ document.addEventListener("DOMContentLoaded", () => {
             window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
+        renderPaymentSection(data) {
+            const paymentMeansCode = String(data.paymentMeans || "").trim();
+            const isEligibleCode = paymentMeansCode === "30" || paymentMeansCode === "58";
+            const hasIban = Boolean(data.iban && data.iban !== "Unbekannt");
+            const hasAmount = Boolean(data.totalAmount && data.totalAmount !== "0.00");
+            const isEuro = data.currency === "EUR";
+            const canCreatePayload = isEligibleCode && hasIban && hasAmount && isEuro;
+
+            if (!canCreatePayload) {
+                this.paymentPanel.classList.add("hidden");
+                this.currentPaymentPayload = "";
+                this.paymentPayload.value = "";
+                this.paymentQr.innerHTML = "";
+
+                if (paymentMeansCode === "10") {
+                    this.paymentNote.textContent = "Barzahlung erkannt: Kein EPC-QR-Code, weil dafuer eine Bankueberweisung gedacht ist.";
+                } else if (!isEligibleCode) {
+                    this.paymentNote.textContent = `Zahlungsart ${paymentMeansCode || "Unbekannt"}: Kein EPC-QR-Code, weil nur Ueberweisung (30) und SEPA-Ueberweisung (58) unterstuetzt werden.`;
+                } else if (!isEuro) {
+                    this.paymentNote.textContent = "Kein EPC-QR-Code, weil der Standard nur fuer EUR-Rechnungen gedacht ist.";
+                } else if (!hasIban) {
+                    this.paymentNote.textContent = "Kein EPC-QR-Code, weil die IBAN fehlt.";
+                } else if (!hasAmount) {
+                    this.paymentNote.textContent = "Kein EPC-QR-Code, weil kein Betrag ermittelt werden konnte.";
+                } else {
+                    this.paymentNote.textContent = "EPC-Payload konnte nicht erzeugt werden.";
+                }
+
+                return;
+            }
+
+            const paymentData = {
+                name: data.sellerName,
+                iban: data.iban,
+                bic: data.bic && data.bic !== "Unbekannt" ? data.bic : "",
+                amount: data.totalAmount,
+                remittanceText: data.invoiceNumber && data.invoiceNumber !== "Unbekannt"
+                    ? `Rechnung ${data.invoiceNumber}`
+                    : data.sellerName,
+                information: data.issueDate && data.issueDate !== "Unbekannt"
+                    ? `Rechnungsdatum ${data.issueDate}`
+                    : ""
+            };
+
+            try {
+                const payload = this.createPaymentPayload(paymentData);
+                this.currentPaymentPayload = payload;
+                this.paymentPanel.classList.remove("hidden");
+                this.paymentSummary.textContent = `${data.sellerName} | ${data.totalAmount} ${data.currency}`;
+                this.paymentRecipient.textContent = data.sellerName || "-";
+                this.paymentReference.textContent = paymentData.remittanceText || "-";
+                this.paymentIban.textContent = data.iban || "-";
+                this.paymentAmount.textContent = `${data.totalAmount} ${data.currency}`;
+                this.paymentPayload.value = payload;
+                this.renderQrFromPayload(payload);
+            } catch (error) {
+                console.error(error);
+                this.paymentPanel.classList.add("hidden");
+                this.currentPaymentPayload = "";
+                this.paymentPayload.value = "";
+                this.paymentQr.innerHTML = "";
+                this.paymentNote.textContent = "EPC-Payload konnte aus den Rechnungsdaten nicht erstellt werden.";
+            }
+        }
+
+        createPaymentPayload(paymentData) {
+            if (this.optionalModules.epc?.EpcQrPayload?.create) {
+                return this.optionalModules.epc.EpcQrPayload.create(paymentData).payload;
+            }
+
+            if (this.optionalModules.epc?.generate) {
+                return this.optionalModules.epc.generate(paymentData);
+            }
+
+            return buildFallbackEpcPayload(paymentData);
+        }
+
+        renderQrFromPayload(payload) {
+            const qrCore = this.optionalModules.qrCore;
+            const qrSvgRenderer = this.optionalModules.qrSvg;
+
+            if (qrCore && qrSvgRenderer) {
+                try {
+                    const qrData = new qrCore(payload, { errorCorrectionLevel: "M", maxVersion: 13 }).generate();
+                    const qrSvg = new qrSvgRenderer(qrData, {
+                        size: 240,
+                        margin: 2,
+                        background: "#ffffff",
+                        colorStart: "#0f766e",
+                        colorEnd: "#0f766e",
+                        dotStyle: "square",
+                        cornerStyle: "square"
+                    }).render();
+
+                    this.paymentQr.innerHTML = qrSvg;
+                    this.paymentNote.textContent = "Der Payload kann direkt in eine Banking-App oder in einen QR-Code-Generator uebernommen werden.";
+                    return;
+                } catch (error) {
+                    console.error(error);
+                    this.paymentQr.innerHTML = "";
+                    this.paymentNote.textContent = `QR-Vorschau konnte nicht gerendert werden: ${error.message}`;
+                    return;
+                }
+            }
+
+            this.paymentQr.innerHTML = `
+                <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    QR-Bibliotheken lokal nicht verfuegbar. Der EPC-Payload ist unten trotzdem sichtbar.
+                </div>
+            `;
+            this.paymentNote.textContent = "Der Payload ist verfuegbar, aber die QR-Vorschau konnte lokal nicht geladen werden.";
+        }
+
         async handleFiles(files) {
             if (files.length === 0) return;
 
