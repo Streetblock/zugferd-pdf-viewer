@@ -53,6 +53,10 @@
                     <div class="bg-blue-50 p-3 md:p-4 rounded-lg border border-blue-100">
                         <p class="text-blue-600 text-xs font-bold uppercase">Rechnungsnummer</p>
                         <p class="text-xl font-bold text-gray-800 mt-1" id="val-inv-number">-</p>
+                        <p class="mt-2 text-xs text-gray-500">
+                            <span class="font-semibold">Rechnungsart:</span>
+                            <span id="val-invoice-type">-</span>
+                        </p>
                     </div>
                     <div class="bg-green-50 p-3 md:p-4 rounded-lg border border-green-100">
                         <p class="text-green-600 text-xs font-bold uppercase">Gesamtbetrag</p>
@@ -86,12 +90,16 @@
                         </h4>
                         <div class="space-y-4 text-sm">
                             <div>
-                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">Adresse</p>
-                                <p id="val-seller-address" class="whitespace-pre-line text-gray-700">-</p>
+                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">Weitere Steuerkennung</p>
+                                <p id="val-seller-tax-reference" class="text-gray-700">-</p>
                             </div>
                             <div>
-                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">USt-Id</p>
-                                <p id="val-seller-vat" class="text-gray-700">-</p>
+                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">Kommunikations-ID</p>
+                                <p id="val-seller-communication-id" class="text-gray-700 break-all">-</p>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">Bestell-/Buyer-Reference</p>
+                                <p id="val-buyer-reference" class="text-gray-700 break-all">-</p>
                             </div>
                         </div>
                     </div>
@@ -100,16 +108,7 @@
                         <h4 class="font-bold text-gray-700 mb-3 md:mb-4 flex items-center gap-2">
                             <span class="material-icons-outlined text-sm">badge</span> Käuferdetails
                         </h4>
-                        <div class="space-y-4 text-sm">
-                            <div>
-                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">Adresse</p>
-                                <p id="val-buyer-address" class="whitespace-pre-line text-gray-700">-</p>
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold uppercase text-gray-400 mb-1">USt-Id</p>
-                                <p id="val-buyer-vat" class="text-gray-700">-</p>
-                            </div>
-                        </div>
+                        <p class="text-sm text-gray-500">Keine weiteren Käuferdetails vorhanden.</p>
                     </div>
                 </div>
 
