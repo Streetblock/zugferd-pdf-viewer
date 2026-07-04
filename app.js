@@ -261,9 +261,9 @@ document.addEventListener("DOMContentLoaded", () => {
             setText("val-seller", data.sellerName);
             setText("val-buyer", data.buyerName);
             setText("val-seller-address", data.sellerAddress);
-            setText("val-buyer-address", data.buyerAddress);
+            setText("val-buyer-vat", data.buyerVatId || "Unbekannt");
             setText("val-seller-vat", data.sellerVatId);
-            setText("val-buyer-vat", data.buyerVatId);
+            setText("val-buyer-reference", data.buyerReference);
             setText("val-payment-means", formatPaymentMeans(data.paymentMeans));
             setText("val-due-date", data.dueDate);
             setText("val-iban", data.iban);
