@@ -80,7 +80,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 "20": "Scheck",
                 "30": "Überweisung",
                 "48": "Kartenzahlung",
-                "49": "Lastschrift"
+                "49": "Lastschrift",
+                "58": "SEPA-Überweisung",
+                "59": "SEPA-Lastschrift"
             };
 
             const formatPaymentMeans = (code) => {
@@ -96,15 +98,69 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById(id).textContent = value && value.trim ? value.trim() : (value ?? "-");
             };
 
+            const escapeHtml = (value) => String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+
+            const cleanValue = (value) => {
+                const normalized = value && value.trim ? value.trim() : String(value ?? "").trim();
+                return normalized && normalized !== "Unbekannt" ? normalized : "";
+            };
+
+            const renderPartySummary = (id, partyName, fields) => {
+                const element = document.getElementById(id);
+                const normalizedFields = fields
+                    .map((field) => ({
+                        label: field.label,
+                        value: cleanValue(field.value),
+                        multiline: Boolean(field.multiline)
+                    }))
+                    .filter((field) => field.value);
+
+                const addressField = normalizedFields.find((field) => field.multiline);
+                const inlineFields = normalizedFields.filter((field) => !field.multiline);
+
+                element.innerHTML = `
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-lg font-bold text-gray-800 break-words">${escapeHtml(partyName || "-")}</p>
+                        </div>
+                        <div class="space-y-2 text-sm text-gray-700">
+                            ${inlineFields.map(({ label, value }) => `
+                                <p><span class="font-semibold">${escapeHtml(label)}:</span> <span class="break-words">${escapeHtml(value)}</span></p>
+                            `).join("")}
+                            ${addressField ? `
+                                <div>
+                                    <p class="text-xs font-bold uppercase text-gray-400 mb-1">${escapeHtml(addressField.label)}</p>
+                                    <p class="whitespace-pre-line break-words text-gray-700">${escapeHtml(addressField.value)}</p>
+                                </div>
+                            ` : ""}
+                        </div>
+                    </div>
+                `;
+            };
+
             setText("val-inv-number", data.invoiceNumber);
             setText("val-date", data.issueDate);
             setText("val-total", `${data.totalAmount} ${data.currency}`);
-            setText("val-seller", data.sellerName);
-            setText("val-buyer", data.buyerName);
-            setText("val-seller-address", data.sellerAddress);
-            setText("val-buyer-address", data.buyerAddress);
-            setText("val-seller-vat", data.sellerVatId);
-            setText("val-buyer-vat", data.buyerVatId);
+            setText("val-invoice-type", data.invoiceTypeDisplay);
+            renderPartySummary("val-seller", data.sellerName, [
+                { label: "Ansprechpartner", value: data.sellerContactPerson },
+                { label: "Telefon", value: data.sellerPhone },
+                { label: "E-Mail", value: data.sellerEmail },
+                { label: "USt-Id", value: data.sellerVatId },
+                { label: "Adresse", value: data.sellerAddress, multiline: true }
+            ]);
+            renderPartySummary("val-buyer", data.buyerName, [
+                { label: "USt-Id", value: data.buyerVatId },
+                { label: "Adresse", value: data.buyerAddress, multiline: true }
+            ]);
+            setText("val-seller-tax-reference", data.sellerTaxReference);
+            setText("val-seller-communication-id", data.sellerCommunicationId);
+            setText("val-buyer-reference", data.buyerReference);
             setText("val-payment-means", formatPaymentMeans(data.paymentMeans));
             setText("val-due-date", data.dueDate);
             setText("val-iban", data.iban);

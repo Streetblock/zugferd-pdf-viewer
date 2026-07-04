@@ -170,15 +170,24 @@ window.InvoiceXMLParser = class InvoiceXMLParser {
     parse() {
         const data = {
             invoiceNumber: "Unbekannt",
+            invoiceTypeCode: "Unbekannt",
+            invoiceTypeLabel: "Unbekannt",
+            invoiceTypeDisplay: "Unbekannt",
             issueDate: "Unbekannt",
             totalAmount: "0.00",
             currency: "EUR",
             sellerName: "Unbekannt",
             buyerName: "Unbekannt",
+            sellerContactPerson: "Unbekannt",
+            sellerPhone: "Unbekannt",
+            sellerEmail: "Unbekannt",
+            sellerCommunicationId: "Unbekannt",
             sellerAddress: "Unbekannt",
             buyerAddress: "Unbekannt",
             sellerVatId: "Unbekannt",
+            sellerTaxReference: "Unbekannt",
             buyerVatId: "Unbekannt",
+            buyerReference: "Unbekannt",
             paymentMeans: "",
             dueDate: "Unbekannt",
             iban: "Unbekannt",
@@ -195,6 +204,25 @@ window.InvoiceXMLParser = class InvoiceXMLParser {
                 this._getPathText(invoiceNode, ["ID"]) ||
                 this._getPathText(invoiceNode, ["ExchangedDocumentNumber"]);
             if (invoiceNumber) data.invoiceNumber = invoiceNumber;
+
+            const invoiceTypeCode =
+                this._getPathText(invoiceNode, ["TypeCode"]) ||
+                this._getPathText(invoiceNode, ["DocumentTypeCode"]);
+            if (invoiceTypeCode) {
+                const normalizedTypeCode = String(invoiceTypeCode).trim();
+                const invoiceTypeLabels = {
+                    "380": "Rechnung",
+                    "381": "Gutschrift",
+                    "382": "Stornorechnung",
+                    "383": "Debit Note",
+                    "384": "Korrekturrechnung"
+                };
+                data.invoiceTypeCode = normalizedTypeCode;
+                data.invoiceTypeLabel = invoiceTypeLabels[normalizedTypeCode] || "Unbekannt";
+                data.invoiceTypeDisplay = data.invoiceTypeLabel !== "Unbekannt"
+                    ? `${data.invoiceTypeCode} = ${data.invoiceTypeLabel}`
+                    : `Code ${data.invoiceTypeCode}`;
+            }
 
             const issueDate =
                 this._getPathText(invoiceNode, ["IssueDate"]) ||
@@ -237,6 +265,11 @@ window.InvoiceXMLParser = class InvoiceXMLParser {
                               this._findFirstByLocalName(this.xmlDoc, "SupplyChainTradeTransaction") ||
                               this.xmlDoc.documentElement;
         if (agreementNode) {
+            data.buyerReference = this._getFirstTextByScopes([agreementNode, this.xmlDoc.documentElement], [
+                ["BuyerReference"],
+                ["BuyerReferenceID"]
+            ]) || data.buyerReference;
+
             const sellerPartyNode = this._findFirstByLocalName(agreementNode, "SellerTradeParty") ||
                                     this._findFirstByLocalName(agreementNode, "AccountingSupplierParty") ||
                                     this._findFirstByLocalName(agreementNode, "SellerParty");
@@ -250,15 +283,51 @@ window.InvoiceXMLParser = class InvoiceXMLParser {
             if (sellerName) {
                 data.sellerName = sellerName;
             }
+
+            const sellerContactNode = this._findFirstByLocalName(sellerContentNode, "DefinedTradeContact");
+            if (sellerContactNode) {
+                data.sellerContactPerson = this._getFirstTextByPaths(sellerContactNode, [
+                    ["PersonName"]
+                ]) || data.sellerContactPerson;
+                data.sellerPhone = this._getFirstTextByPaths(sellerContactNode, [
+                    ["TelephoneUniversalCommunication", "CompleteNumber"],
+                    ["TelephoneNumber"]
+                ]) || data.sellerPhone;
+                data.sellerEmail = this._getFirstTextByPaths(sellerContactNode, [
+                    ["EmailURIUniversalCommunication", "URIID"],
+                    ["EmailURI"]
+                ]) || data.sellerEmail;
+            }
+
+            data.sellerCommunicationId = this._getFirstTextByPaths(sellerContentNode, [
+                ["URIUniversalCommunication", "URIID"],
+                ["ElectronicMail", "URIID"]
+            ]) || data.sellerCommunicationId;
+
             data.sellerAddress = this._formatAddress(
                 this._findFirstByLocalName(sellerContentNode, "PostalTradeAddress") ||
                 this._findFirstByLocalName(sellerContentNode, "PostalAddress")
             ) || data.sellerAddress;
-            data.sellerVatId = this._getFirstTextByPaths(sellerContentNode, [
-                ["SpecifiedTaxRegistration", "ID"],
-                ["PartyTaxScheme", "CompanyID"],
-                ["VATIdentifier"]
-            ]) || data.sellerVatId;
+
+            const sellerTaxRegistrationNodes = this._findAllByLocalName(sellerContentNode, "SpecifiedTaxRegistration");
+            for (const taxRegistrationNode of sellerTaxRegistrationNodes) {
+                const taxId = this._getPathText(taxRegistrationNode, ["ID"]);
+                if (!taxId) continue;
+
+                const schemeId = (this._getPathAttribute(taxRegistrationNode, ["ID"], "schemeID") || "").toUpperCase();
+                if (schemeId === "VA" || data.sellerVatId === "Unbekannt") {
+                    data.sellerVatId = taxId;
+                } else if (data.sellerTaxReference === "Unbekannt") {
+                    data.sellerTaxReference = taxId;
+                }
+            }
+
+            if (data.sellerVatId === "Unbekannt") {
+                data.sellerVatId = this._getFirstTextByPaths(sellerContentNode, [
+                    ["PartyTaxScheme", "CompanyID"],
+                    ["VATIdentifier"]
+                ]) || data.sellerVatId;
+            }
 
             const buyerPartyNode = this._findFirstByLocalName(agreementNode, "BuyerTradeParty") ||
                                    this._findFirstByLocalName(agreementNode, "AccountingCustomerParty") ||
@@ -277,11 +346,24 @@ window.InvoiceXMLParser = class InvoiceXMLParser {
                 this._findFirstByLocalName(buyerContentNode, "PostalTradeAddress") ||
                 this._findFirstByLocalName(buyerContentNode, "PostalAddress")
             ) || data.buyerAddress;
-            data.buyerVatId = this._getFirstTextByPaths(buyerContentNode, [
-                ["SpecifiedTaxRegistration", "ID"],
-                ["PartyTaxScheme", "CompanyID"],
-                ["VATIdentifier"]
-            ]) || data.buyerVatId;
+
+            const buyerTaxRegistrationNodes = this._findAllByLocalName(buyerContentNode, "SpecifiedTaxRegistration");
+            for (const taxRegistrationNode of buyerTaxRegistrationNodes) {
+                const taxId = this._getPathText(taxRegistrationNode, ["ID"]);
+                if (!taxId) continue;
+
+                const schemeId = (this._getPathAttribute(taxRegistrationNode, ["ID"], "schemeID") || "").toUpperCase();
+                if (schemeId === "VA" || data.buyerVatId === "Unbekannt") {
+                    data.buyerVatId = taxId;
+                }
+            }
+
+            if (data.buyerVatId === "Unbekannt") {
+                data.buyerVatId = this._getFirstTextByPaths(buyerContentNode, [
+                    ["PartyTaxScheme", "CompanyID"],
+                    ["VATIdentifier"]
+                ]) || data.buyerVatId;
+            }
         }
 
         if (settlementNode) {
@@ -336,8 +418,12 @@ window.InvoiceXMLParser = class InvoiceXMLParser {
             }
         }
 
-        const lineItems = this._findAllByLocalName(this.xmlDoc, "SpecifiedTradeLineItem").length ||
-                          this._findAllByLocalName(this.xmlDoc, "InvoiceLine").length;
+        const lineItemTags = [
+            "SpecifiedTradeLineItem",
+            "IncludedSupplyChainTradeLineItem",
+            "InvoiceLine"
+        ];
+        const lineItems = lineItemTags.reduce((count, tagName) => count + this._findAllByLocalName(this.xmlDoc, tagName).length, 0);
         data.lineItemCount = String(lineItems);
 
         return data;
