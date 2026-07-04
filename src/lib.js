@@ -1,5 +1,21 @@
 window.PDFAttachmentExtractor = class PDFAttachmentExtractor {
-    async extractXML(file) {
+    _normalizeAttachmentContent(attachment) {
+        const payload = attachment.content || attachment.data || attachment.bytes;
+        return typeof payload === "string"
+            ? payload
+            : new TextDecoder("utf-8").decode(payload);
+    }
+
+    _isXmlAttachment(key, att) {
+        const filename = (att?.filename || att?.name || key || "").toLowerCase();
+        return filename.endsWith(".xml") || filename.includes("zugferd") || filename.includes("factur-x");
+    }
+
+    async extractXMLAttachments(file) {
+        if (typeof pdfjsLib === "undefined") {
+            throw new Error("PDF.js ist nicht geladen. Der PDF-Import kann lokal nicht gestartet werden.");
+        }
+
         const arrayBuffer = await file.arrayBuffer();
         const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         const pdfDoc = await loadingTask.promise;
@@ -9,24 +25,26 @@ window.PDFAttachmentExtractor = class PDFAttachmentExtractor {
             throw new Error("Keine Anhange in dieser PDF gefunden. Ist es ein ZUGFeRD/PDF-A3 Dokument?");
         }
 
-        const entry = Object.entries(attachments).find(([key, att]) => {
-            const filename = (att?.filename || att?.name || key || "").toLowerCase();
-            return filename.endsWith(".xml") || filename.includes("zugferd") || filename.includes("factur-x");
-        });
+        return Object.entries(attachments)
+            .filter(([key, att]) => this._isXmlAttachment(key, att))
+            .map(([key, xmlAttachment]) => ({
+                key,
+                filename: xmlAttachment.filename || xmlAttachment.name || `${key || "attachment"}.xml`,
+                content: this._normalizeAttachmentContent(xmlAttachment)
+            }));
+    }
 
-        if (!entry) {
+    async extractXML(file) {
+        const xmlAttachments = await this.extractXMLAttachments(file);
+
+        if (!xmlAttachments.length) {
             throw new Error("Kein XML-Anhang gefunden. Dies scheint keine gueltige E-Rechnung zu sein.");
         }
 
-        const [, xmlAttachment] = entry;
-        const payload = xmlAttachment.content || xmlAttachment.data || xmlAttachment.bytes;
-        const xmlString = typeof payload === "string"
-            ? payload
-            : new TextDecoder("utf-8").decode(payload);
-
         return {
-            filename: xmlAttachment.filename || xmlAttachment.name || "attachment.xml",
-            content: xmlString
+            filename: xmlAttachments[0].filename,
+            content: xmlAttachments[0].content,
+            xmlAttachments
         };
     }
 };
@@ -336,8 +354,12 @@ window.InvoiceXMLParser = class InvoiceXMLParser {
             }
         }
 
-        const lineItems = this._findAllByLocalName(this.xmlDoc, "SpecifiedTradeLineItem").length ||
-                          this._findAllByLocalName(this.xmlDoc, "InvoiceLine").length;
+        const lineItemTags = [
+            "SpecifiedTradeLineItem",
+            "IncludedSupplyChainTradeLineItem",
+            "InvoiceLine"
+        ];
+        const lineItems = lineItemTags.reduce((count, tagName) => count + this._findAllByLocalName(this.xmlDoc, tagName).length, 0);
         data.lineItemCount = String(lineItems);
 
         return data;
