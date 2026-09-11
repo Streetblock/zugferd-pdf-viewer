@@ -51,7 +51,7 @@ test('Profile-specific success, unsupported and broken engines remain distinct',
             assert.equal(V.summary(V.applyXmlReport(make(), { ...report, status: 'not-checked' })).status, 'unknown');
         }
     }
-    const id = profile + '#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0';
+    const id = profile + '#compliant#urn:xeinkauf.de:kosit:xrechnung_2.3';
     const result = V.applyXmlReport({ ...V.preflight(xml.replace(profile, id)), xmlSha256: 'hash' }, {
         sourceSha256: 'hash', profileId: id, status: 'unsupported', xsd: {}, schematron: {}, issues: []
     });
@@ -62,6 +62,22 @@ test('Profile-specific success, unsupported and broken engines remain distinct',
 test('Buyer reference is only required by optional B2G context', () => {
     assert.equal(V.preflight(xml).checks.find(c => c.id === 'reference').status, 'info');
     assert.equal(V.preflight(xml, { b2g: true }).checks.find(c => c.id === 'reference').status, 'fail');
+});
+
+test('XRechnung success requires both layers; buyer reference is checked independently of the switch', async () => {
+    const xr = await readFile(new URL('fixtures/invoice-xrechnung.xml', import.meta.url), 'utf8');
+    const make = () => ({ ...V.preflight(xr), xmlSha256: 'hash' });
+    const report = { sourceSha256: 'hash', profileId: make().profileId, status: 'valid', xsd: { status: 'valid' },
+        schematron: { status: 'valid', fired: 88, stages: [{ key: 'cen', status: 'valid', fired: 70 },
+            { key: 'xrechnung', status: 'valid', fired: 18 }] }, issues: [] };
+    assert.equal(V.summary(V.applyXmlReport(make(), report)).label, 'XML-Prüfung bestanden · Profil XRechnung 3.0 (CII)');
+    for (const stages of [[], report.schematron.stages.slice(0, 1), [report.schematron.stages[0], report.schematron.stages[0]],
+        [report.schematron.stages[0], { key: 'xrechnung', status: 'valid', fired: 0 }]]) {
+        assert.equal(V.summary(V.applyXmlReport(make(), { ...report, schematron: { ...report.schematron, stages } })).status, 'unknown');
+    }
+    const missing = V.preflight(xr.replace(/<ram:BuyerReference>.*?<\/ram:BuyerReference>/, ''));
+    assert.equal(missing.b2g, false);
+    assert.match(missing.checks.find(c => c.id === 'reference').detail, /unabhängig vom B2G-Schalter/);
 });
 test('Malformed XML, DTD, wrong namespaces and unsupported UBL are rejected', () => {
     for (const value of ['<broken>', '<!DOCTYPE x><x/>', xml.replaceAll('CrossIndustryInvoice:100', 'fake:100'), '<Invoice/>']) {

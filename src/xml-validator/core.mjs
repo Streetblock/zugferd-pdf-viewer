@@ -1,6 +1,6 @@
 import { XmlDocument, XsdValidator, ParseOption, XmlBufferInputProvider, xmlRegisterInputProvider } from 'libxml2-wasm';
 
-import { PROFILE_PACKS } from './profiles.mjs';
+import { PROFILE_PACKS, ruleStages } from './profiles.mjs';
 export { PROFILE_ID, SUPPORTED_PROFILES } from './profiles.mjs';
 export const MAX_XML_BYTES = 5 * 1024 * 1024;
 const NS = {
@@ -24,30 +24,34 @@ async function loadRules(pack, SaxonJS, loadAsset) {
     const asset = name => loadAsset(pack.key + '/' + name);
     const manifest = JSON.parse(await asset('manifest.json'));
     if (manifest.profileKey !== pack.key) throw new Error('Regelpaket passt nicht zum erkannten Profil.');
-    const sefName = pack.key + '.sef.json';
-    const codesName = pack.stem + '_codedb.xml';
     const verified = async name => {
         const text = await asset(name);
         if (await sha256(encoder.encode(text)) !== manifest.files[name]) throw new Error(`Regeldatei beschädigt: ${name}`);
         return text;
     };
-    const [schemasText, sefText, codesText] = await Promise.all([
-        verified('schemas.json'), verified(sefName), verified('source/' + codesName)
-    ]);
+    const schemasText = await verified('schemas.json');
     const schemas = JSON.parse(schemasText);
     const base = `https://zugferd-rules.invalid/${manifest.files['schemas.json']}/`;
     for (const [name, source] of Object.entries(schemas)) provider.addBuffer(base + name, encoder.encode(source));
     let schemaDoc;
     let schema;
     try {
-        schemaDoc = XmlDocument.fromString(schemas[pack.stem + '.xsd'], { ...OPTIONS, url: base + pack.stem + '.xsd' });
+        const schemaName = pack.schema || pack.stem + '.xsd';
+        schemaDoc = XmlDocument.fromString(schemas[schemaName], { ...OPTIONS, url: base + schemaName });
         schema = XsdValidator.fromDoc(schemaDoc);
     } finally { schemaDoc?.dispose(); }
-    let codes;
-    let sef;
-    try { sef = JSON.parse(sefText); codes = await SaxonJS.getResource({ text: codesText, type: 'xml', baseURI: base + codesName }); }
+    const stages = [];
+    try {
+        for (const stage of ruleStages(pack)) {
+            const sef = JSON.parse(await verified(stage.sef));
+            const documentPool = {};
+            if (stage.codes) documentPool[base + stage.codes] = await SaxonJS.getResource({
+                text: await verified('source/' + stage.codes), type: 'xml', baseURI: base + stage.codes });
+            stages.push({ ...stage, sef, sefName: stage.sef, documentPool });
+        }
+    }
     catch (error) { schema.dispose(); throw error; }
-    return { schema, sef, codes, base, manifest, sefName, codesName };
+    return { schema, stages, base, manifest };
 }
 
 export async function createValidator({ SaxonJS, loadAsset }) {
@@ -97,16 +101,17 @@ export async function createValidator({ SaxonJS, loadAsset }) {
                 const pack = PROFILE_PACKS.find(p => p.ids.includes(result.profileId));
                 if (!pack) {
                     result.status = result.profileId ? 'unsupported' : 'invalid';
-                    result.issues.push({ severity: result.profileId ? 'warning' : 'error', stage: 'profile', rule: result.profileId ? 'PROFILE-UNSUPPORTED' : 'PROFILE-MISSING', message: 'Die Profilkennung fehlt oder wird noch nicht unterstützt. Unterstützt: BASIC, EN16931 und EXTENDED mit den festgelegten Profilkennungen.' });
+                    result.issues.push({ severity: result.profileId ? 'warning' : 'error', stage: 'profile', rule: result.profileId ? 'PROFILE-UNSUPPORTED' : 'PROFILE-MISSING', message: 'Die Profilkennung fehlt oder wird noch nicht unterstützt. Unterstützt: BASIC, EN16931, EXTENDED und XRechnung 3.0 CIUS (CII) mit den festgelegten Profilkennungen.' });
                     return result;
                 }
                 result.profile = pack.label;
-                result.scope = `ZUGFeRD/Factur-X ${pack.label} XML`;
+                result.scope = pack.scope || `ZUGFeRD/Factur-X ${pack.label} XML`;
                 let rules = loaded.get(pack.key);
                 if (!rules) { rules = await loadRules(pack, SaxonJS, loadAsset); loaded.set(pack.key, rules); }
-                const { schema, sef, codes, base, manifest, sefName, codesName } = rules;
+                const { schema, stages, base, manifest } = rules;
                 result.ruleset = manifest.ruleset;
-                result.rulesetSha256 = manifest.files[sefName];
+                result.rulesetSha256 = stages.length === 1 ? manifest.files[stages[0].sefName]
+                    : await sha256(encoder.encode(stages.map(s => manifest.files[s.sefName]).join('\n')));
                 result.schemaSha256 = manifest.files['schemas.json'];
                 result.compilerInputAdaptations = manifest.compilerInputAdaptations || [manifest.compilerInputAdaptation].filter(Boolean);
                 try { schema.validate(doc); result.xsd.status = 'valid'; }
@@ -118,24 +123,37 @@ export async function createValidator({ SaxonJS, loadAsset }) {
                     result.status = 'invalid';
                     return result; // Prevent arithmetic/cast failures on schema-invalid data.
                 }
+                result.schematron.stages = [];
+                result.customLevels = pack.customLevels || {};
+                for (const stage of stages) {
                 const transformed = await SaxonJS.transform({
-                    stylesheetInternal: sef, stylesheetBaseURI: base + sefName,
+                    stylesheetInternal: stage.sef, stylesheetBaseURI: base + stage.sefName,
                     sourceText: doc.toString({ encoding: 'utf-8' }), sourceBaseURI: 'urn:invoice:input',
-                    documentPool: { [base + codesName]: codes },
+                    documentPool: stage.documentPool,
                     destination: 'serialized', nonInteractive: true
                 }, 'async');
-                result.svrl = transformed.principalResult;
-                svrl = XmlDocument.fromString(result.svrl, OPTIONS);
+                if (stages.length === 1) result.svrl = transformed.principalResult;
+                svrl = XmlDocument.fromString(transformed.principalResult, OPTIONS);
                 if (!svrl.get('/svrl:schematron-output', NS)) throw new Error('Kein SVRL-Prüfbericht erhalten.');
-                result.schematron.fired = svrl.find('//svrl:fired-rule', NS).length;
-                if (!result.schematron.fired) throw new Error('Keine Schematron-Regeln ausgeführt.');
-                for (const assertion of svrl.find('//svrl:failed-assert', NS)) {
+                const fired = svrl.find('//svrl:fired-rule', NS).length;
+                if (!fired) throw new Error(`Keine Schematron-Regeln ausgeführt: ${stage.key}.`);
+                const stageIssues = [];
+                for (const assertion of svrl.find('//svrl:failed-assert | //svrl:successful-report', NS)) {
                     const message = content(assertion, 'svrl:text');
                     const rule = content(assertion, '@id') || message.match(/\[([^\]]+)\]/)?.[1] || 'SCHEMATRON';
-                    const flag = content(assertion, '@flag').toLowerCase();
-                    // Keep the rule's original severity; unlike Mustang, do not silently downgrade rules.
-                    const severity = ['warning', 'info'].includes(flag) ? flag : 'error';
-                    result.issues.push({ severity, stage: 'schematron', rule, location: content(assertion, '@location'), test: content(assertion, '@test'), message });
+                    const flag = (content(assertion, '@flag') || content(assertion, '@role')).toLowerCase();
+                    // KoSIT's explicit scenario overrides are versioned and disclosed;
+                    // Factur-X keeps upstream severity unchanged.
+                    const severity = pack.customLevels?.[rule] || (flag === 'information' ? 'info'
+                        : ['warning', 'info'].includes(flag) ? flag : 'error');
+                    stageIssues.push({ severity, originalFlag: flag, stage: 'schematron', layer: stage.key, rule,
+                        location: content(assertion, '@location'), test: content(assertion, '@test'), message });
+                }
+                result.issues.push(...stageIssues);
+                result.schematron.fired += fired;
+                result.schematron.stages.push({ key: stage.key, status: stageIssues.some(i => i.severity === 'error') ? 'invalid' : 'valid',
+                    fired, sha256: manifest.files[stage.sefName], svrl: transformed.principalResult });
+                svrl.dispose(); svrl = undefined;
                 }
                 result.schematron.status = result.issues.some(i => i.severity === 'error') ? 'invalid' : 'valid';
                 result.status = result.schematron.status;

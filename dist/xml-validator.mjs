@@ -7125,9 +7125,38 @@ var PROFILE_PACKS = Object.freeze([
   { key: "extended", label: "EXTENDED", stem: "FACTUR-X_EXTENDED", ids: [
     PROFILE_ID + "#conformant#urn:factur-x.eu:1p0:extended",
     PROFILE_ID + "#conformant#urn:zugferd.de:2p0:extended"
-  ] }
+  ] },
+  {
+    key: "xrechnung",
+    label: "XRechnung 3.0 (CII)",
+    scope: "XRechnung 3.0 CIUS (CII) XML",
+    schema: "CrossIndustryInvoice_100pD16B.xsd",
+    ids: [PROFILE_ID + "#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0"],
+    stages: [
+      { key: "cen", source: "EN16931-CII-validation.xsl", sef: "cen.sef.json" },
+      { key: "xrechnung", source: "XRechnung-CII-validation.xsl", sef: "xrechnung.sef.json" }
+    ],
+    // Exact overrides from KoSIT's CIUS CII scenario, release 2026-08-31.
+    customLevels: {
+      "BR-CL-23": "warning",
+      "BR-CL-21": "warning",
+      "CII-SR-452": "error",
+      "CII-SR-453": "error",
+      "CII-SR-454": "error",
+      "CII-SR-465": "error",
+      "CII-SR-466": "error",
+      "CII-SR-475": "info",
+      "CII-SR-476": "info"
+    }
+  }
 ].map((p) => Object.freeze({ ...p, ids: Object.freeze(p.ids) })));
 var SUPPORTED_PROFILES = Object.freeze(PROFILE_PACKS.flatMap((p) => p.ids));
+var ruleStages = (pack) => pack.stages || [{
+  key: pack.key,
+  source: pack.stem + ".xslt",
+  sef: pack.key + ".sef.json",
+  codes: pack.stem + "_codedb.xml"
+}];
 
 // src/xml-validator/core.mjs
 var MAX_XML_BYTES = 5 * 1024 * 1024;
@@ -7149,39 +7178,41 @@ async function loadRules(pack, SaxonJS, loadAsset) {
   const asset = (name) => loadAsset(pack.key + "/" + name);
   const manifest = JSON.parse(await asset("manifest.json"));
   if (manifest.profileKey !== pack.key) throw new Error("Regelpaket passt nicht zum erkannten Profil.");
-  const sefName = pack.key + ".sef.json";
-  const codesName = pack.stem + "_codedb.xml";
   const verified = async (name) => {
     const text = await asset(name);
     if (await sha256(encoder.encode(text)) !== manifest.files[name]) throw new Error(`Regeldatei besch\xE4digt: ${name}`);
     return text;
   };
-  const [schemasText, sefText, codesText] = await Promise.all([
-    verified("schemas.json"),
-    verified(sefName),
-    verified("source/" + codesName)
-  ]);
+  const schemasText = await verified("schemas.json");
   const schemas = JSON.parse(schemasText);
   const base = `https://zugferd-rules.invalid/${manifest.files["schemas.json"]}/`;
   for (const [name, source] of Object.entries(schemas)) provider.addBuffer(base + name, encoder.encode(source));
   let schemaDoc;
   let schema;
   try {
-    schemaDoc = XmlDocument.fromString(schemas[pack.stem + ".xsd"], { ...OPTIONS, url: base + pack.stem + ".xsd" });
+    const schemaName = pack.schema || pack.stem + ".xsd";
+    schemaDoc = XmlDocument.fromString(schemas[schemaName], { ...OPTIONS, url: base + schemaName });
     schema = XsdValidator.fromDoc(schemaDoc);
   } finally {
     schemaDoc?.dispose();
   }
-  let codes;
-  let sef;
+  const stages = [];
   try {
-    sef = JSON.parse(sefText);
-    codes = await SaxonJS.getResource({ text: codesText, type: "xml", baseURI: base + codesName });
+    for (const stage of ruleStages(pack)) {
+      const sef = JSON.parse(await verified(stage.sef));
+      const documentPool = {};
+      if (stage.codes) documentPool[base + stage.codes] = await SaxonJS.getResource({
+        text: await verified("source/" + stage.codes),
+        type: "xml",
+        baseURI: base + stage.codes
+      });
+      stages.push({ ...stage, sef, sefName: stage.sef, documentPool });
+    }
   } catch (error2) {
     schema.dispose();
     throw error2;
   }
-  return { schema, sef, codes, base, manifest, sefName, codesName };
+  return { schema, stages, base, manifest };
 }
 async function createValidator({ SaxonJS, loadAsset }) {
   if (!SaxonJS?.transform || !loadAsset) throw new Error("XML-Laufzeit oder Regeldateien fehlen.");
@@ -7239,19 +7270,19 @@ async function createValidator({ SaxonJS, loadAsset }) {
         const pack = PROFILE_PACKS.find((p) => p.ids.includes(result.profileId));
         if (!pack) {
           result.status = result.profileId ? "unsupported" : "invalid";
-          result.issues.push({ severity: result.profileId ? "warning" : "error", stage: "profile", rule: result.profileId ? "PROFILE-UNSUPPORTED" : "PROFILE-MISSING", message: "Die Profilkennung fehlt oder wird noch nicht unterst\xFCtzt. Unterst\xFCtzt: BASIC, EN16931 und EXTENDED mit den festgelegten Profilkennungen." });
+          result.issues.push({ severity: result.profileId ? "warning" : "error", stage: "profile", rule: result.profileId ? "PROFILE-UNSUPPORTED" : "PROFILE-MISSING", message: "Die Profilkennung fehlt oder wird noch nicht unterst\xFCtzt. Unterst\xFCtzt: BASIC, EN16931, EXTENDED und XRechnung 3.0 CIUS (CII) mit den festgelegten Profilkennungen." });
           return result;
         }
         result.profile = pack.label;
-        result.scope = `ZUGFeRD/Factur-X ${pack.label} XML`;
+        result.scope = pack.scope || `ZUGFeRD/Factur-X ${pack.label} XML`;
         let rules = loaded.get(pack.key);
         if (!rules) {
           rules = await loadRules(pack, SaxonJS, loadAsset);
           loaded.set(pack.key, rules);
         }
-        const { schema, sef, codes, base, manifest, sefName, codesName } = rules;
+        const { schema, stages, base, manifest } = rules;
         result.ruleset = manifest.ruleset;
-        result.rulesetSha256 = manifest.files[sefName];
+        result.rulesetSha256 = stages.length === 1 ? manifest.files[stages[0].sefName] : await sha256(encoder.encode(stages.map((s) => manifest.files[s.sefName]).join("\n")));
         result.schemaSha256 = manifest.files["schemas.json"];
         result.compilerInputAdaptations = manifest.compilerInputAdaptations || [manifest.compilerInputAdaptation].filter(Boolean);
         try {
@@ -7265,26 +7296,51 @@ async function createValidator({ SaxonJS, loadAsset }) {
           result.status = "invalid";
           return result;
         }
-        const transformed = await SaxonJS.transform({
-          stylesheetInternal: sef,
-          stylesheetBaseURI: base + sefName,
-          sourceText: doc.toString({ encoding: "utf-8" }),
-          sourceBaseURI: "urn:invoice:input",
-          documentPool: { [base + codesName]: codes },
-          destination: "serialized",
-          nonInteractive: true
-        }, "async");
-        result.svrl = transformed.principalResult;
-        svrl = XmlDocument.fromString(result.svrl, OPTIONS);
-        if (!svrl.get("/svrl:schematron-output", NS)) throw new Error("Kein SVRL-Pr\xFCfbericht erhalten.");
-        result.schematron.fired = svrl.find("//svrl:fired-rule", NS).length;
-        if (!result.schematron.fired) throw new Error("Keine Schematron-Regeln ausgef\xFChrt.");
-        for (const assertion of svrl.find("//svrl:failed-assert", NS)) {
-          const message = content(assertion, "svrl:text");
-          const rule = content(assertion, "@id") || message.match(/\[([^\]]+)\]/)?.[1] || "SCHEMATRON";
-          const flag = content(assertion, "@flag").toLowerCase();
-          const severity = ["warning", "info"].includes(flag) ? flag : "error";
-          result.issues.push({ severity, stage: "schematron", rule, location: content(assertion, "@location"), test: content(assertion, "@test"), message });
+        result.schematron.stages = [];
+        result.customLevels = pack.customLevels || {};
+        for (const stage of stages) {
+          const transformed = await SaxonJS.transform({
+            stylesheetInternal: stage.sef,
+            stylesheetBaseURI: base + stage.sefName,
+            sourceText: doc.toString({ encoding: "utf-8" }),
+            sourceBaseURI: "urn:invoice:input",
+            documentPool: stage.documentPool,
+            destination: "serialized",
+            nonInteractive: true
+          }, "async");
+          if (stages.length === 1) result.svrl = transformed.principalResult;
+          svrl = XmlDocument.fromString(transformed.principalResult, OPTIONS);
+          if (!svrl.get("/svrl:schematron-output", NS)) throw new Error("Kein SVRL-Pr\xFCfbericht erhalten.");
+          const fired = svrl.find("//svrl:fired-rule", NS).length;
+          if (!fired) throw new Error(`Keine Schematron-Regeln ausgef\xFChrt: ${stage.key}.`);
+          const stageIssues = [];
+          for (const assertion of svrl.find("//svrl:failed-assert | //svrl:successful-report", NS)) {
+            const message = content(assertion, "svrl:text");
+            const rule = content(assertion, "@id") || message.match(/\[([^\]]+)\]/)?.[1] || "SCHEMATRON";
+            const flag = (content(assertion, "@flag") || content(assertion, "@role")).toLowerCase();
+            const severity = pack.customLevels?.[rule] || (flag === "information" ? "info" : ["warning", "info"].includes(flag) ? flag : "error");
+            stageIssues.push({
+              severity,
+              originalFlag: flag,
+              stage: "schematron",
+              layer: stage.key,
+              rule,
+              location: content(assertion, "@location"),
+              test: content(assertion, "@test"),
+              message
+            });
+          }
+          result.issues.push(...stageIssues);
+          result.schematron.fired += fired;
+          result.schematron.stages.push({
+            key: stage.key,
+            status: stageIssues.some((i) => i.severity === "error") ? "invalid" : "valid",
+            fired,
+            sha256: manifest.files[stage.sefName],
+            svrl: transformed.principalResult
+          });
+          svrl.dispose();
+          svrl = void 0;
         }
         result.schematron.status = result.issues.some((i) => i.severity === "error") ? "invalid" : "valid";
         result.status = result.schematron.status;

@@ -1,0 +1,16 @@
+{
+  "engine": "KoSIT 1.6.3",
+  "configuration": "v2026-08-31",
+  "files": {
+    "tools/kosit-validator-1.6.3.jar": "799e64befca97d4080e03608c80b85dd5a5ecc5f4ae4f35d1116ec2855b9a7c9",
+    ".test-artifacts/kosit-config/scenarios.xml": "3e8161a39dfaa6aea4d990b279aab848be4f4c6169e820f354a159bda7693fb0",
+    ".test-artifacts/kosit-config/resources/xrechnung-report.xsl": "a2c9fa2272fb14667d70ed62f11c6ad6c7167f12f2abbe1b420915ccefd5af8c",
+    ".test-artifacts/kosit-config/resources/default-report.xsl": "b40e53d6d170a1c482aedf09cb5d88ebc2e916db096237d6b3341457cd50e2d1",
+    ".test-artifacts/kosit-config/resources/cii/16b/xsl/EN16931-CII-validation.xsl": "0911e927f13f9ae2cdc7f973643f27bf0ad3c5da02483c04a5b8a47eb4822199",
+    ".test-artifacts/kosit-config/resources/xrechnung/3.0.2/xsl/XRechnung-CII-validation.xsl": "ec54f662803a87f527ec606d1320bc404f1657a848af6a76f37f32905e4aac40",
+    ".test-artifacts/kosit-config/resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd": "3baf143b90f289d62c5dfb086aa51fa183490a2d0b38a40c6b31dcae0760f2ba",
+    ".test-artifacts/kosit-config/resources/cii/16b/xsd/CrossIndustryInvoice_QualifiedDataType_100pD16B.xsd": "6649215914728652e883662bec1d3eab008c215e86a59f3bb417db9723ee8c5c",
+    ".test-artifacts/kosit-config/resources/cii/16b/xsd/CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd": "1c42244298a863bcc0b5196983ff0a5d084fcabe58aea77ef82b242e7cd0ddfd",
+    ".test-artifacts/kosit-config/resources/cii/16b/xsd/CrossIndustryInvoice_UnqualifiedDataType_100pD16B.xsd": "04fce6f6f28521886731294be18a4e6bb5cb3003456457d99ad5c4d3e652f497"
+  }
+}
