@@ -62,6 +62,11 @@ die jeweils angegebenen Profilregeln, nicht pauschal alle EN16931-Ausprägungen.
 Ein unbekanntes Profil oder ein Lade-/Laufzeitfehler kann keine grüne Bestätigung
 erzeugen. Es gibt keinen automatischen Rückfall auf ein anderes Regelpaket.
 
+Der Prüfbereich zeigt zunächst nur Ergebnis, gegebenenfalls die Anzahl der
+Warnungen sowie „Prüfbericht (JSON)“ und „Original-XML“. Ein Klick auf die
+Ergebniszeile öffnet alle Prüfdetails, Fehler, Hinweise und Prüfsummen. Bei jeder
+neuen Dateiauswahl ist der Bereich wieder geschlossen, auch bei Regelfehlern.
+
 Die vorhandene PDF-Extraktion liefert die ursprünglichen XML-Bytes an denselben
 Prüfkern. Mehrere mögliche Rechnungsanhänge führen zum Abbruch. Eine PDF mit
 gültigem XML zeigt **„XML bestanden · PDF/A-Prüfung offen“**. Die vollständige

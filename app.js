@@ -150,9 +150,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         bindEvents() {
             document.getElementById('new-file').addEventListener('click', () => this.fileInput.click());
-            document.getElementById('retry-validation').addEventListener('click', () => {
-                if (this.currentFile) this.handleFiles([this.currentFile]);
-            });
             document.getElementById('b2g-context').addEventListener('change', () => {
                 if (this.currentFile) this.handleFiles([this.currentFile]);
             });
@@ -161,9 +158,6 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             document.getElementById('download-xml').addEventListener('click', () => {
                 if (this.xmlData) this.download(new Blob([this.xmlData.bytes], { type: 'application/xml' }), this.xmlData.filename);
-            });
-            document.getElementById('download-original').addEventListener('click', () => {
-                if (this.currentFile) this.download(this.currentFile, this.currentFile.name);
             });
             this.dropZone.addEventListener("click", () => this.fileInput.click());
             this.fileInput.addEventListener("change", (e) => this.handleFiles(e.target.files));
@@ -202,6 +196,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         resetUI() {
+            document.getElementById('validation-details').open = false;
             this.errorBox.classList.add("hidden");
             this.invoiceView.classList.add("hidden");
             this.paymentPanel.classList.add("hidden");
@@ -590,8 +585,10 @@ document.addEventListener("DOMContentLoaded", () => {
             element.textContent = pending ? 'XML-Prüfung läuft: XSD und Schematron …' : summary.label;
             element.dataset.status = pending ? 'unknown' : summary.status;
             this.updateStatus(pending ? 'Prüfung läuft' : summary.label, pending || summary.status === 'unknown' ? 'bg-yellow-500' : summary.status === 'fail' ? 'bg-red-500' : 'bg-green-500');
-            document.getElementById('retry-validation').disabled = pending;
             document.getElementById('download-report').disabled = pending;
+            const warnings = result.issues.filter(i => i.severity === 'warning').length;
+            document.getElementById('validation-counts').textContent = !pending && warnings
+                ? `${warnings} ${warnings === 1 ? 'Warnung' : 'Warnungen'}` : '';
             const checks = document.getElementById('validation-checks');
             checks.replaceChildren();
             const labels = { pass: 'Bestanden', fail: 'Fehler', unknown: 'Offen', info: 'Hinweis' };

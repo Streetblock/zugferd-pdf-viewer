@@ -9,9 +9,18 @@ body {
 .viewer-button:hover { background: #f1f5f9; }
 .viewer-button:disabled { opacity: .5; cursor: wait; }
 .viewer-button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
-.validation-panel { border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px; }
-.validation-panel h2 { font-size: 18px; font-weight: 700; }
-#validation-summary { font-size: 17px; font-weight: 700; margin: 8px 0; }
+.validation-panel { border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px 16px; }
+.validation-toggle { cursor: pointer; display: flex; align-items: center; gap: 10px; list-style: none; }
+.validation-toggle::-webkit-details-marker { display: none; }
+.validation-toggle::before { content: '›'; font-size: 24px; color: #475569; }
+details[open] > .validation-toggle::before { transform: rotate(90deg); }
+.validation-toggle:focus-visible { outline: 3px solid #60a5fa; outline-offset: 4px; border-radius: 3px; }
+.validation-heading { display: grid; gap: 2px; flex: 1; min-width: 0; }
+#validation-title { font-size: 12px; color: #475569; }
+#validation-summary { font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+.validation-toggle-label { font-size: 12px; color: #475569; }
+#validation-counts { font-size: 12px; color: #92400e; }
+.validation-issues-title { font-size: 14px; font-weight: 600; margin-top: 10px; }
 .validation-caption { color: #475569; font-size: 12px; margin: 10px 0; overflow-wrap: anywhere; }
 .validation-check { border-top: 1px solid #e2e8f0; padding: 10px 0; }
 .validation-check strong { font-size: 14px; }
@@ -19,9 +28,7 @@ body {
 [data-status="pass"] > strong, #validation-summary[data-status="pass"] { color: #166534; }
 [data-status="fail"] > strong, #validation-summary[data-status="fail"] { color: #b91c1c; }
 [data-status="unknown"] > strong, #validation-summary[data-status="unknown"] { color: #92400e; }
-.validation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-#validation-details { margin-top: 10px; }
-#validation-details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.validation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 
 .drag-active {
     border-color: #3b82f6 !important;

@@ -57,19 +57,22 @@
 
             <div id="invoice-view" class="hidden mt-4 space-y-4 md:space-y-5 animate-fade-in">
                 <section id="validation-panel" class="validation-panel" aria-labelledby="validation-title">
-                    <h2 id="validation-title">Konformitätsprüfung</h2>
-                    <p id="validation-summary" role="status" aria-live="polite"></p>
+                    <details id="validation-details">
+                    <summary class="validation-toggle">
+                        <span class="validation-heading"><span id="validation-title">Konformitätsprüfung</span><span id="validation-summary" role="status" aria-live="polite"></span></span>
+                        <span id="validation-counts"></span>
+                        <span class="validation-toggle-label" aria-hidden="true">Details</span>
+                    </summary>
                     <p class="validation-caption">Geprüft werden technische Regeln des erkannten Profils. Steuerliche Sachverhalte, PDF/XML-Inhaltsgleichheit und Archivprozesse sind nicht Teil des Nachweises.</p>
                     <div id="validation-checks"></div>
-                    <details id="validation-details"><summary>Fehler und Warnungen</summary><div id="validation-issues"></div></details>
+                    <h3 class="validation-issues-title">Fehler und Warnungen</h3><div id="validation-issues"></div>
                     <p id="validation-hash" class="validation-caption"></p>
+                    <p class="validation-caption">Alle Rechnungswerte unten stammen aus dem maßgeblichen XML-Datensatz.</p>
+                    </details>
                     <div class="validation-actions">
-                        <button id="retry-validation" type="button" class="viewer-button">Erneut prüfen</button>
                         <button id="download-report" type="button" class="viewer-button">Prüfbericht (JSON)</button>
                         <button id="download-xml" type="button" class="viewer-button">Original-XML</button>
-                        <button id="download-original" type="button" class="viewer-button">Originaldatei</button>
                     </div>
-                    <p class="validation-caption">Alle Rechnungswerte unten stammen aus dem maßgeblichen XML-Datensatz.</p>
                 </section>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                     <div class="bg-blue-50 p-3 md:p-4 rounded-lg border border-blue-100">
