@@ -3,6 +3,26 @@ body {
     background-color: #f3f4f6;
 }
 
+.validation-intro { display: grid; gap: 10px; margin-bottom: 16px; font-size: 13px; color: #475569; }
+.validation-intro .viewer-button { justify-self: start; }
+.viewer-button { border: 1px solid #94a3b8; border-radius: 6px; padding: 7px 12px; background: white; color: #1e293b; font-size: 13px; cursor: pointer; }
+.viewer-button:hover { background: #f1f5f9; }
+.viewer-button:disabled { opacity: .5; cursor: wait; }
+.viewer-button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
+.validation-panel { border: 1px solid #cbd5e1; border-radius: 10px; padding: 18px; }
+.validation-panel h2 { font-size: 18px; font-weight: 700; }
+#validation-summary { font-size: 17px; font-weight: 700; margin: 8px 0; }
+.validation-caption { color: #475569; font-size: 12px; margin: 10px 0; overflow-wrap: anywhere; }
+.validation-check { border-top: 1px solid #e2e8f0; padding: 10px 0; }
+.validation-check strong { font-size: 14px; }
+.validation-check p, .validation-issue { font-size: 13px; margin-top: 3px; color: #475569; overflow-wrap: anywhere; white-space: pre-wrap; }
+[data-status="pass"] > strong, #validation-summary[data-status="pass"] { color: #166534; }
+[data-status="fail"] > strong, #validation-summary[data-status="fail"] { color: #b91c1c; }
+[data-status="unknown"] > strong, #validation-summary[data-status="unknown"] { color: #92400e; }
+.validation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+#validation-details { margin-top: 10px; }
+#validation-details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+
 .drag-active {
     border-color: #3b82f6 !important;
     background-color: #eff6ff !important;

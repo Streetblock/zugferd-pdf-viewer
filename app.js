@@ -135,6 +135,10 @@ document.addEventListener("DOMContentLoaded", () => {
             this.optionalModules = optionalModules || { epc: null, qrCore: null, qrSvg: null, errors: [] };
 
             this.bindEvents();
+            this.selectionId = 0;
+            this.currentFile = null;
+            this.localValidator = false;
+            this.detectValidator();
         }
 
         setOptionalModules(optionalModules) {
@@ -145,6 +149,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         bindEvents() {
+            document.getElementById('new-file').addEventListener('click', () => this.fileInput.click());
+            document.getElementById('retry-validation').addEventListener('click', () => {
+                if (this.currentFile) this.handleFiles([this.currentFile]);
+            });
+            document.getElementById('b2g-context').addEventListener('change', () => {
+                if (this.currentFile) this.handleFiles([this.currentFile]);
+            });
+            document.getElementById('download-report').addEventListener('click', () => {
+                if (this.validationResult) this.download(new Blob([JSON.stringify(this.validationResult, null, 2)], { type: 'application/json' }), 'pruefbericht.json');
+            });
+            document.getElementById('download-xml').addEventListener('click', () => {
+                if (this.xmlData) this.download(new Blob([this.xmlData.bytes], { type: 'application/xml' }), this.xmlData.filename);
+            });
+            document.getElementById('download-original').addEventListener('click', () => {
+                if (this.currentFile) this.download(this.currentFile, this.currentFile.name);
+            });
             this.dropZone.addEventListener("click", () => this.fileInput.click());
             this.fileInput.addEventListener("change", (e) => this.handleFiles(e.target.files));
 
@@ -190,6 +210,8 @@ document.addEventListener("DOMContentLoaded", () => {
             this.paymentNote.textContent = "";
             this.paymentQr.innerHTML = "";
             this.dropZone.classList.remove("hidden");
+            this.validationResult = null;
+            this.xmlData = null;
         }
 
         showLoading() {
@@ -219,7 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
         renderInvoice(data, filename) {
             this.hideLoading();
             this.invoiceView.classList.remove("hidden");
-            this.updateStatus("Erfolg", "bg-green-500");
+            this.updateStatus("XML gelesen", "bg-yellow-500");
 
             const paymentMeansLabels = {
                 "10": "Bargeld",
@@ -538,31 +560,124 @@ document.addEventListener("DOMContentLoaded", () => {
             this.paymentNote.textContent = "Der Payload ist verfuegbar, aber die QR-Vorschau konnte lokal nicht geladen werden.";
         }
 
+        download(blob, name) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = name.split(/[\\/]/).pop();
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        async detectValidator() {
+            if (location.protocol !== 'http:' || location.hostname !== '127.0.0.1') return;
+            try {
+                const response = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
+                const health = await response.json();
+                this.localValidator = Boolean(health.available);
+                document.getElementById('validator-status').textContent = health.available
+                    ? `${health.engine} bereit. Dateien werden ausschließlich auf diesem Rechner geprüft; temporäre Prüfdateien werden anschließend gelöscht.`
+                    : 'Browsermodus ohne Java. Vollständige XML-/PDF/A-Prüfung noch offen. Entwickler können Mustang separat im Referenzmodus starten.';
+            } catch {
+                this.localValidator = false;
+                document.getElementById('validator-status').textContent = 'Lokaler Validator nicht erreichbar. Konformität kann derzeit nicht bestätigt werden.';
+            }
+        }
+
+        renderValidation(result, pending = false) {
+            const summary = window.InvoiceValidation.summary(result);
+            const element = document.getElementById('validation-summary');
+            element.textContent = pending ? 'Vollprüfung läuft: XSD, Schematron und gegebenenfalls PDF/A-3 …' : summary.label;
+            element.dataset.status = pending ? 'unknown' : summary.status;
+            this.updateStatus(pending ? 'Prüfung läuft' : summary.label, pending || summary.status === 'unknown' ? 'bg-yellow-500' : summary.status === 'fail' ? 'bg-red-500' : 'bg-green-500');
+            document.getElementById('retry-validation').disabled = pending;
+            document.getElementById('download-report').disabled = pending;
+            const checks = document.getElementById('validation-checks');
+            checks.replaceChildren();
+            const labels = { pass: 'Bestanden', fail: 'Fehler', unknown: 'Offen', info: 'Hinweis' };
+            for (const check of result.checks) {
+                const row = document.createElement('div');
+                row.className = 'validation-check'; row.dataset.status = check.status;
+                const title = document.createElement('strong');
+                title.textContent = `${labels[check.status]} · ${check.title}`;
+                const detail = document.createElement('p'); detail.textContent = check.detail;
+                row.append(title, detail); checks.append(row);
+            }
+            const issues = document.getElementById('validation-issues');
+            issues.replaceChildren();
+            for (const issue of result.issues) {
+                const line = document.createElement('p'); line.className = 'validation-issue';
+                line.textContent = `${issue.severity.toUpperCase()} ${issue.rule} ${issue.location}\n${issue.message}`;
+                issues.append(line);
+            }
+            if (!result.issues.length) issues.textContent = 'Keine Detailmeldungen vorhanden. Offene Prüfungen oben beachten.';
+            document.getElementById('validation-hash').textContent = result.sourceSha256
+                ? `Original SHA-256: ${result.sourceSha256}${result.checkedAt ? ` · Geprüft: ${result.checkedAt}` : ''}` : '';
+        }
+
         async handleFiles(files) {
             if (files.length === 0) return;
-
+            const selection = ++this.selectionId;
+            this.validationAbort?.abort();
+            this.resetUI();
             const file = files[0];
+            this.currentFile = null;
+            this.fileInput.value = '';
             const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-            if (!isPdf) {
-                this.showError("Bitte waehlen Sie eine PDF-Datei aus.");
+            const isXml = file.name.toLowerCase().endsWith('.xml') || ['application/xml', 'text/xml'].includes(file.type);
+            if (!isPdf && !isXml) {
+                this.showError("Bitte eine PDF- oder XML-Datei auswählen.");
                 return;
             }
-
-            this.resetUI();
+            if (!file.size || file.size > 20 * 1024 * 1024) {
+                this.showError('Die Datei muss zwischen 1 Byte und 20 MB groß sein.'); return;
+            }
+            this.currentFile = file;
             this.showLoading();
 
             try {
-                const extractor = new PDFAttachmentExtractor();
-                const xmlData = await extractor.extractXML(file);
-
-                console.log("Extracted XML:", xmlData.filename);
-
+                const V = window.InvoiceValidation;
+                const originalBytes = new Uint8Array(await file.arrayBuffer());
+                const xmlData = isPdf ? await new PDFAttachmentExtractor().extractXML(file)
+                    : { filename: file.name, bytes: originalBytes, content: V.decode(originalBytes) };
+                if (selection !== this.selectionId) return;
+                const result = V.preflight(xmlData.content, { isPdf, b2g: document.getElementById('b2g-context').checked });
+                result.sourceFilename = file.name;
+                result.xmlFilename = xmlData.filename;
+                result.sourceSha256 = await V.hash(originalBytes);
+                result.xmlSha256 = await V.hash(xmlData.bytes);
+                if (selection !== this.selectionId) return;
                 const parser = new InvoiceXMLParser(xmlData.content);
                 const invoiceData = parser.parse();
-
+                this.xmlData = xmlData;
+                this.validationResult = result;
                 this.renderInvoice(invoiceData, xmlData.filename);
+                this.renderValidation(result);
+                await this.detectValidator();
+                if (selection !== this.selectionId) return;
+                if (this.localValidator) {
+                    this.renderValidation(result, true);
+                    const controller = new AbortController();
+                    this.validationAbort = controller;
+                    const timer = setTimeout(() => controller.abort(), 95000);
+                    try {
+                        const response = await fetch('/api/validate', { method: 'POST',
+                            headers: { 'Content-Type': isPdf ? 'application/pdf' : 'application/xml', 'X-Viewer-Request': 'validate' },
+                            body: file, signal: controller.signal });
+                        const report = await response.json();
+                        if (!response.ok) throw new Error(report.error || 'Validator nicht verfügbar.');
+                        if (report.sourceSha256 !== result.sourceSha256) throw new Error('Dateiprüfsumme stimmt nicht mit dem Bericht überein.');
+                        if (selection !== this.selectionId) return;
+                        V.applyReport(result, report, result.xmlSha256);
+                    } catch (error) {
+                        if (selection !== this.selectionId) return;
+                        result.checks.push({ id: 'service', status: 'unknown', title: 'Vollprüfung nicht abgeschlossen', detail: error.message });
+                    } finally { clearTimeout(timer); }
+                    if (selection === this.selectionId) this.renderValidation(result);
+                }
             } catch (err) {
-                console.error(err);
+                if (selection !== this.selectionId) return;
+                this.currentFile = null;
                 this.showError(err.message);
             }
         }

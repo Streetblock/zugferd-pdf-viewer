@@ -1,0 +1,17 @@
+{
+  "name": "zugferd-pdf-viewer",
+  "private": true,
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/validation.test.mjs tests/server.test.mjs",
+    "dev:reference": "node server.mjs --reference",
+    "test:reference": "node --test tests/reference.test.mjs",
+    "reference": "node tools/reference.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}

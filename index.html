@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZUGFeRD PDF Reader (OOP)</title>
+    <title>ZUGFeRD Viewer · EN 16931 prüfen</title>
     <meta name="description" content="Browserbasierter ZUGFeRD-Viewer zum Auslesen von PDF/A-3-Rechnungen direkt aus dem eingebetteten XML-Anhang.">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231e293b'/%3E%3Cpath d='M18 14h18l10 10v26a4 4 0 0 1-4 4H18a4 4 0 0 1-4-4V18a4 4 0 0 1 4-4z' fill='%23ffffff'/%3E%3Cpath d='M36 14v10h10' fill='none' stroke='%231e293b' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M24 31h16M24 39h16M24 47h12' stroke='%231e293b' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="src/lib.js"></script>
+    <script src="src/validation.js" defer></script>
+    <script src="src/lib.js" defer></script>
     <script src="app.js" defer></script>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-start p-2 md:p-4 overflow-auto">
@@ -21,7 +22,7 @@
                     <span class="material-icons-outlined">description</span>
                     ZUGFeRD Viewer
                 </h1>
-                <p class="text-slate-400 text-sm mt-1">Lokal & Sicher: PDF/A-3 Rechnungsdaten extrahieren</p>
+                <p class="text-slate-400 text-sm mt-1">XML anzeigen · EN 16931 und PDF/A-3 lokal prüfen</p>
             </div>
             <div id="status-badge" class="hidden px-3 py-1 rounded-full text-xs font-semibold bg-gray-600">
                 Warte auf Datei...
@@ -29,10 +30,15 @@
         </div>
 
         <div class="p-4 md:p-5">
+            <div class="validation-intro">
+                <p id="validator-status" role="status">Browsermodus ohne Java: Anzeige und Profilprüfung. Vollständige XSD-, Schematron- und PDF/A-3-Prüfung noch nicht verfügbar.</p>
+                <label><input type="checkbox" id="b2g-context"> Rechnung an öffentliche Verwaltung: Käuferreferenz auf Vorhandensein prüfen</label>
+                <button id="new-file" type="button" class="viewer-button">Datei auswählen</button>
+            </div>
             <div id="drop-zone" class="border-4 border-dashed border-gray-300 rounded-xl p-6 md:p-8 text-center transition-all cursor-pointer hover:border-gray-400 hover:bg-gray-50 group">
-                <input type="file" id="file-input" class="hidden" accept=".pdf,application/pdf">
+                <input type="file" id="file-input" class="hidden" accept=".pdf,.xml,application/pdf,application/xml,text/xml">
                 <span class="material-icons-outlined text-6xl text-gray-300 group-hover:text-blue-500 mb-4 transition-colors">cloud_upload</span>
-                <h3 class="text-xl font-semibold text-gray-700">PDF hier ablegen</h3>
+                <h3 class="text-xl font-semibold text-gray-700">PDF oder Rechnungs-XML hier ablegen</h3>
                 <p class="text-gray-500 mt-2">oder klicken, um eine ZUGFeRD-Rechnung auszuwählen</p>
             </div>
 
@@ -49,6 +55,21 @@
             </div>
 
             <div id="invoice-view" class="hidden mt-4 space-y-4 md:space-y-5 animate-fade-in">
+                <section id="validation-panel" class="validation-panel" aria-labelledby="validation-title">
+                    <h2 id="validation-title">Konformitätsprüfung</h2>
+                    <p id="validation-summary" role="status" aria-live="polite"></p>
+                    <p class="validation-caption">Geprüft werden technische Regeln des erkannten Profils. Steuerliche Sachverhalte, PDF/XML-Inhaltsgleichheit und Archivprozesse sind nicht Teil des Nachweises.</p>
+                    <div id="validation-checks"></div>
+                    <details id="validation-details"><summary>Fehler und Warnungen</summary><div id="validation-issues"></div></details>
+                    <p id="validation-hash" class="validation-caption"></p>
+                    <div class="validation-actions">
+                        <button id="retry-validation" type="button" class="viewer-button">Erneut prüfen</button>
+                        <button id="download-report" type="button" class="viewer-button">Prüfbericht (JSON)</button>
+                        <button id="download-xml" type="button" class="viewer-button">Original-XML</button>
+                        <button id="download-original" type="button" class="viewer-button">Originaldatei</button>
+                    </div>
+                    <p class="validation-caption">Alle Rechnungswerte unten stammen aus dem maßgeblichen XML-Datensatz.</p>
+                </section>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                     <div class="bg-blue-50 p-3 md:p-4 rounded-lg border border-blue-100">
                         <p class="text-blue-600 text-xs font-bold uppercase">Rechnungsnummer</p>
@@ -186,7 +207,8 @@
         </div>
 
         <div class="bg-gray-100 p-4 text-center text-xs text-gray-500 border-t border-gray-200">
-            OOP JS Implementation | Powered by PDF.js
+            <a href="https://www.bundesfinanzministerium.de/Content/DE/FAQ/e-rechnung.html" target="_blank" rel="noopener noreferrer">BMF: E-Rechnung</a> ·
+            <a href="https://github.com/ZUGFeRD/mustangproject" target="_blank" rel="noopener noreferrer">Mustangproject</a> · PDF.js
         </div>
     </div>
 </body>
