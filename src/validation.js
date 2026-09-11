@@ -33,6 +33,7 @@ window.InvoiceValidation = (() => {
         }
         if (/^urn:cen\.eu:en16931:2017#conformant#urn:(factur-x\.eu:1p0|zugferd\.de:2p0):extended$/.test(id)) return 'EXTENDED';
         if (/^urn:cen\.eu:en16931:2017#compliant#urn:(factur-x\.eu:1p0|zugferd\.de:2p0):basic$/.test(id)) return 'BASIC';
+        if (id === 'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0') return 'XRechnung 3.0 (CII)';
         if (/^urn:cen\.eu:en16931:2017#compliant#urn:xeinkauf\.de:kosit:xrechnung_[0-9]+\.[0-9]+$/.test(id)) return 'XRECHNUNG';
         if (id.startsWith('urn:ferd:CrossIndustryDocument:invoice:1p0:')) return 'ZUGFeRD 1 (veraltet)';
         return 'Unbekannt';
@@ -41,7 +42,7 @@ window.InvoiceValidation = (() => {
     function preflight(xml, { isPdf = false, b2g = false } = {}) {
         const doc = parse(xml), root = doc.documentElement;
         if (root.localName !== 'CrossIndustryInvoice' || root.namespaceURI !== CII) {
-            throw new Error('Unterstützt wird ZUGFeRD 2.x / Factur-X (CII). Dieses XML hat eine andere Rechnungs-Syntax.');
+            throw new Error('Unterstützt wird CII (ZUGFeRD 2.x / Factur-X und XRechnung 3.0). Dieses XML hat eine andere Rechnungs-Syntax; UBL wird noch nicht unterstützt.');
         }
         const context = child(root, 'ExchangedDocumentContext', CII);
         const guideline = child(context, 'GuidelineSpecifiedDocumentContextParameter', RAM);
@@ -59,7 +60,8 @@ window.InvoiceValidation = (() => {
                 : `${id || 'Profilkennung fehlt.'} — Die Profilkennung allein ist kein Konformitätsnachweis.`
                     + (name === 'BASIC' ? ' BASIC ist grundsätzlich zulässig; bei ZUGFeRD gilt dies ab Version 2.0.1. Die genaue Unterversion ist nicht immer aus der XML-Kennung bestimmbar.' : ' Das XML-Ergebnis steht separat unter XSD und Schematron.')),
             check('reference', b2g && !reference ? 'fail' : 'info', 'Käuferreferenz / Leitweg-ID',
-                b2g ? (reference ? `Vorhanden: ${reference}. Zuordnung und Leitweg-ID-Prüfziffer nicht geprüft. Dies ist keine vollständige B2G-/XRechnung-Prüfung.` : 'Für den gewählten B2G-Kontext fehlt BuyerReference (BT-10).')
+                name === 'XRechnung 3.0 (CII)' ? `${reference ? 'Vorhanden: ' + reference + '.' : 'BuyerReference fehlt.'} Die XRechnung-Regeln prüfen BT-10 unabhängig vom B2G-Schalter. Empfängerzuordnung und Leitweg-ID-Prüfziffer werden nicht geprüft.`
+                : b2g ? (reference ? `Vorhanden: ${reference}. Der Schalter prüft nur das Vorhandensein; Zuordnung und Leitweg-ID-Prüfziffer werden nicht geprüft.` : 'Für den gewählten B2G-Kontext fehlt BuyerReference (BT-10).')
                     : (reference ? `Vorhanden: ${reference}.` : 'Im allgemeinen B2B-Kontext nicht pauschal verpflichtend.')),
             check('xml', 'unknown', 'XSD und Schematron', 'JavaScript-Prüfung noch nicht abgeschlossen.'),
             check('pdf', isPdf ? 'unknown' : 'info', 'PDF/A-3 und Einbettung', isPdf ? 'Noch nicht geprüft.' : 'Bei einer reinen XML-Datei nicht anwendbar.'),
@@ -71,8 +73,11 @@ window.InvoiceValidation = (() => {
 
     function applyXmlReport(result, report) {
         if (report.sourceSha256 !== result.xmlSha256) throw new Error('XML-Prüfsumme stimmt nicht mit dem JS-Bericht überein.');
+        const stages = report.schematron.stages || [];
+        const complete = result.profile !== 'XRechnung 3.0 (CII)' || (stages.length === 2
+            && ['cen', 'xrechnung'].every(key => stages.some(s => s.key === key && s.status === 'valid' && s.fired > 0)));
         const passed = report.status === 'valid' && report.profileId === result.profileId
-            && report.xsd.status === 'valid' && report.schematron.status === 'valid' && report.schematron.fired > 0;
+            && report.xsd.status === 'valid' && report.schematron.status === 'valid' && report.schematron.fired > 0 && complete;
         const status = passed ? 'pass' : report.status === 'invalid' ? 'fail' : 'unknown';
         const detail = passed ? `${result.profile}-Profilregeln bestanden: XSD und ${report.schematron.fired} ausgeführte Schematron-Regeln. ${report.ruleset}.`
             : report.status === 'unsupported' ? 'Dieses Profil wird angezeigt, aber von der JS-Prüfung noch nicht unterstützt.'

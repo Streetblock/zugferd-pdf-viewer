@@ -1,7 +1,8 @@
 # ZUGFeRD Viewer
 
 Der Viewer liest Rechnungs-XML aus PDF-Anhängen oder XML-Dateien und prüft
-**XSD und Schematron für BASIC, EN16931 und EXTENDED direkt im Browser**. Derselbe
+**XSD und Schematron für BASIC, EN16931, EXTENDED und XRechnung 3.0 CIUS (CII)
+direkt im Browser**. Derselbe
 Prüfkern funktioniert in Node. Die Laufzeit benötigt **kein Java und keinen
 Validierungsserver**. Mustangproject bleibt eine optionale Entwicklungsreferenz.
 
@@ -24,6 +25,9 @@ von externen Quellen; die gesamte Anwendung ist daher noch nicht offline gebünd
 ## Prüfumfang und Grenzen
 
 - CII `CrossIndustryInvoice:100`, Profile BASIC, EN16931 und EXTENDED.
+- XRechnung 3.0 CIUS in CII: Original-UN/CEFACT-D16B-XSD plus beide vollständigen
+  Schematron-Stufen (CEN EN16931 und KoSIT XRechnung). Gepinnt auf XRechnung 3.0.2,
+  KoSIT-Konfiguration `2026-08-31`, CEN `1.3.16`, XRechnung-Schematron `2.6.0`.
 - Automatische Auswahl anhand exakter Profilkennungen. BASIC und EXTENDED
   unterstützen die Kennungen sowohl von Factur-X als auch von ZUGFeRD.
 - Original-XSDs und profilbezogene Schematron-Regeln einschließlich Codelisten
@@ -35,12 +39,22 @@ von externen Quellen; die gesamte Anwendung ist daher noch nicht offline gebünd
 - Status `valid`, `invalid`, `unsupported` oder `not-checked`. Nur vollständig
   abgeschlossene XSD- und Schematron-Prüfungen können `valid` ergeben.
 
-XRechnung wird weiterhin angezeigt, erhält in dieser JS-Version aber **keine
-positive XML-Konformitätsbestätigung**. UBL wird noch nicht verarbeitet.
+Die XRechnung-Prüfung startet automatisch bei der exakten Kennung
+`urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0`.
+Ältere XRechnung-Versionen, XRechnung Extension, CVD sowie UBL Invoice/CreditNote
+sind noch nicht unterstützt. Ein Ergebnis gilt ausschließlich für den angegebenen
+Regelstand und die erkannte Syntax.
 MINIMUM und BASIC-WL werden als für vollständige
 deutsche B2B-E-Rechnungen ungeeignet ausgewiesen. Der B2G-Schalter prüft nur das
-Vorhandensein von BuyerReference, keine vollständige XRechnung, Leitweg-ID-Prüfziffer
-oder Empfängerzuordnung.
+Vorhandensein von BuyerReference bei anderen Profilen. Bei XRechnung wird BT-10
+unabhängig vom Schalter durch die Regeln geprüft. Leitweg-ID-Prüfziffer und
+Empfängerzuordnung werden nicht geprüft.
+
+XRechnung übernimmt die ausdrücklich konfigurierten KoSIT-Fehlerstufen. Beispiel:
+`CII-SR-465` wird zum Fehler, `BR-CL-23` zur Warnung. Eine falsche IBAN-Prüfziffer
+ist laut Originalregel `BR-DE-19` eine Warnung. `valid` bedeutet daher: keine
+Fehler; vorhandene Warnungen bleiben sichtbar. Originalstufe und angewendete
+Overrides stehen im JSON-Bericht. Die Prüfung bestätigt kein existierendes Bankkonto.
 
 Die Anzeige trennt „XML-Prüfung bestanden · Profil …“, „XML-Prüfung: Regelfehler“
 und „noch nicht unterstützt“. Ein erfolgreiches BASIC-/EXTENDED-Ergebnis bestätigt
@@ -95,14 +109,21 @@ Die API akzeptiert `Uint8Array`/Node `Buffer`, `ArrayBuffer` und UTF-8-Text.
 Originalbytes sind insbesondere für UTF-16 und andere Kodierungen vorzuziehen.
 `createValidator({ assetBaseUrl })` erlaubt im Browser einen anderen Ablageort
 der Regeln; die URL bezeichnet jetzt den gemeinsamen Ordner `rules/` mit den
-Unterordnern `basic/`, `en16931/`, `extended/` (zuvor direkt `rules/en16931/`).
-`SUPPORTED_PROFILES` exportiert alle fünf unterstützten Kennungen. Die Pakete
+Unterordnern `basic/`, `en16931/`, `extended/`, `xrechnung/`.
+`SUPPORTED_PROFILES` exportiert alle sechs unterstützten Kennungen. Die Pakete
 werden erst beim ersten Dokument des jeweiligen Profils geladen und je Instanz
 wiederverwendet. `dispose()` gibt alle geladenen XSD-Validatoren frei.
 SaxonJS muss vorher geladen sein. Parameter- und Parallelitätsfehler werfen
 Exceptions. Fehler beim Laden eines Regelpakets und bei seiner Ausführung
 ergeben `not-checked` mit Detailmeldung. Ein fehlgeschlagener Ladevorgang wird
 beim nächsten Prüfversuch wiederholt.
+
+`schematron.stages` enthält pro Stufe Status, Anzahl ausgeführter Regeln,
+SEF-SHA-256 und den unveränderten SVRL-Bericht. Bei XRechnung müssen `cen` und
+`xrechnung` erfolgreich abgeschlossen sein; es gibt keinen Rückfall auf eine
+einzige Stufe. Das bisherige `svrl`-Feld bleibt für einstufige Profile erhalten.
+Bei mehreren Stufen ist `rulesetSha256` der SHA-256 der in Ausführungsreihenfolge
+mit LF verbundenen SEF-Prüfsummen; die einzelnen Prüfsummen stehen in den Stufen.
 
 ## Bauen und testen
 
@@ -121,8 +142,13 @@ zusätzlich eine explizite SaxonJS-2.7-Kompatibilitätsanpassung an zwei numeris
 Ausdrücken. Grenzen und Rundungen bleiben erhalten; Originale und SVRL-Testtexte
 bleiben unverändert. Die Anpassung und ihr Compiler-Eingabehash stehen im Manifest,
 die Anpassung auch im JSON-Prüfbericht. Siehe [EXTENDED-Regelherkunft](rules/extended/PROVENANCE.md).
+Für XRechnung verwendet die IBAN-Funktion in der Compilerkopie `xs:decimal`
+statt `xs:integer`, um die Modulo-97-Rechnung jenseits der JS-Ganzzahlpräzision
+exakt auszuführen. Der Build prüft außerdem Kennung, Regelstufen und Fehlerstufen
+gegen das unveränderte KoSIT-Szenario. Siehe [XRechnung-Regelherkunft](rules/xrechnung/PROVENANCE.md).
 Compiler-Metadaten können sich beim Neubauen ändern. Mit `npm run build -- basic`
 oder `npm run build -- extended` lassen sich einzelne Pakete gezielt neu bauen.
+Für XRechnung: `npm run build -- xrechnung`.
 
 Normale Tests brauchen kein Java. Sie umfassen positive und negative Rechnungen,
 Summen, Steuerangaben, Codes, XSD-Datentypen, Kodierungen, nicht unterstützte
@@ -166,10 +192,32 @@ Die JAR gehört weder ins Repository noch in die Auslieferung. `npm install`,
 Temporäre Referenzdateien werden nach Abschluss und abgefangenen Fehlern gelöscht;
 bei einem Rechner-/Prozessabsturz können Kopien im Temp-Verzeichnis verbleiben.
 
+## KoSIT als zusätzliche XRechnung-Entwicklungsreferenz
+
+Für einen Vergleich mit exakt derselben XRechnung-Konfiguration wird optional
+KoSIT Validator 1.6.3 verwendet. Er ist ausschließlich ein Testwerkzeug; der
+Viewer lädt und startet ihn nicht. Mustang bleibt für die bisherigen Profile erhalten.
+
+```powershell
+./tools/install-kosit.ps1
+npm run test:kosit
+```
+
+Installation und Test benötigen Netz zum Download bzw. JDK 17+ zur Ausführung.
+JAR und entpackte Konfiguration bleiben unter ignorierten Pfaden. Downloads und
+verwendete Referenzdateien werden per SHA-256 geprüft. 20 synthetische Fälle
+vergleichen Annahmeentscheidung und XSD-Ergebnis; bei schemafähigen Dokumenten
+zusätzlich sämtliche Regelkennungen, angewendeten Fehlerstufen und XPath-Fundstellen.
+Darunter sind gültige und ungültige IBANs mit Leerzeichen, Buchstaben und langen
+Kontonummern. Die normalen Tests prüfen zusätzlich nicht unterstützte Varianten,
+fehlende/beschädigte Regelstufen und unvollständige Berichte. Im Browser wurden
+die gültige Beispieldatei und der absichtliche BT-10-Negativfall geprüft.
+
 ## Herkunft und Lizenzen
 
 Siehe die Regelherkunft für [EN16931](rules/en16931/PROVENANCE.md),
-[BASIC](rules/basic/PROVENANCE.md), [EXTENDED](rules/extended/PROVENANCE.md) und
+[BASIC](rules/basic/PROVENANCE.md), [EXTENDED](rules/extended/PROVENANCE.md),
+[XRechnung](rules/xrechnung/PROVENANCE.md) und
 [Drittanbieter-Hinweise](vendor/NOTICE.txt). SaxonJS ist kostenlos nutzbar,
 aber **nicht Open Source**. Die Browserdatei bleibt unverändert; ihre Bedingungen
 gelten auch bei einer späteren eigenständigen Bibliotheksauslieferung.
@@ -180,6 +228,6 @@ gelten auch bei einer späteren eigenständigen Bibliotheksauslieferung.
 - [BMF-FAQ](https://www.bundesfinanzministerium.de/Content/DE/FAQ/e-rechnung.html)
 - [FeRD: Profile](https://www.ferd-net.de/standards/zugferd-faq)
 
-Als Nächstes: XRechnung und UBL mit eigenen Referenzfällen, Worker-Ausführung und
+Als Nächstes: UBL Invoice/CreditNote, XRechnung Extension/CVD, Worker-Ausführung und
 eine Java-freie PDF/A-Engine mit nachgewiesenem Prüfumfang. Metadaten allein
 dürfen keine PDF/A-Konformität bestätigen.

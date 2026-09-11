@@ -1,0 +1,37 @@
+{
+  "profileKey": "xrechnung",
+  "ruleset": "XRechnung 3.0.2 CIUS CII; KoSIT 2026-08-31; CEN 1.3.16",
+  "source": "https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/tag/v2026-08-31",
+  "compiler": "xslt3 2.7.0",
+  "compilerInputAdaptations": [
+    "Virtual xml:base for local resource resolution.",
+    "SaxonJS 2.7 integer-precision workaround: xr:checkIBAN uses xs:decimal instead of xs:integer for the digit string before mod 97; integral values and the original rule predicate are preserved."
+  ],
+  "compilerInputHashes": {
+    "cen": "b30e1370f552e57ca7fd2179f62f69fc33de5105b45249e1b37696270c53b962",
+    "xrechnung": "a6a381b4000c2a48450f6f7b2e27faf40d1710507be56996037bfcf16658402e"
+  },
+  "customLevels": {
+    "BR-CL-23": "warning",
+    "BR-CL-21": "warning",
+    "CII-SR-452": "error",
+    "CII-SR-453": "error",
+    "CII-SR-454": "error",
+    "CII-SR-465": "error",
+    "CII-SR-466": "error",
+    "CII-SR-475": "info",
+    "CII-SR-476": "info"
+  },
+  "files": {
+    "schemas.json": "c443bed51b6eba639eddcfcb47cdb20e6646c1e360db2bb72eb85f412555e8f7",
+    "cen.sef.json": "206f77a251986b444bbf8598c7b73f1cc11427924d80c67cce6069c9d4f9e381",
+    "xrechnung.sef.json": "439547c8e612325518d4702b08d41cc2226657b216a49a5c0eaaa554d6485df6",
+    "source/CrossIndustryInvoice_100pD16B.xsd": "3baf143b90f289d62c5dfb086aa51fa183490a2d0b38a40c6b31dcae0760f2ba",
+    "source/CrossIndustryInvoice_QualifiedDataType_100pD16B.xsd": "6649215914728652e883662bec1d3eab008c215e86a59f3bb417db9723ee8c5c",
+    "source/CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd": "1c42244298a863bcc0b5196983ff0a5d084fcabe58aea77ef82b242e7cd0ddfd",
+    "source/CrossIndustryInvoice_UnqualifiedDataType_100pD16B.xsd": "04fce6f6f28521886731294be18a4e6bb5cb3003456457d99ad5c4d3e652f497",
+    "source/EN16931-CII-validation.xsl": "0911e927f13f9ae2cdc7f973643f27bf0ad3c5da02483c04a5b8a47eb4822199",
+    "source/scenarios.xml": "3e8161a39dfaa6aea4d990b279aab848be4f4c6169e820f354a159bda7693fb0",
+    "source/XRechnung-CII-validation.xsl": "ec54f662803a87f527ec606d1320bc404f1657a848af6a76f37f32905e4aac40"
+  }
+}

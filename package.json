@@ -3,10 +3,11 @@
   "private": true,
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test tests/validation.test.mjs tests/server.test.mjs tests/xml-validator.test.mjs",
+    "test": "node --test tests/validation.test.mjs tests/server.test.mjs tests/xml-validator.test.mjs tests/xrechnung.test.mjs",
     "build": "node tools/build-validator.mjs",
     "dev:reference": "node server.mjs --reference",
     "test:reference": "node --test tests/reference.test.mjs",
+    "test:kosit": "node --test tests/kosit-reference.test.mjs",
     "reference": "node tools/reference.mjs"
   },
   "engines": {

@@ -16,8 +16,10 @@ Der Browser-Build in ../dist/xml-validator.mjs enthält diese JS-/WASM-Laufzeit.
 Quelle: https://github.com/jameslan/libxml2-wasm
 
 Regeln und abgeleitetes SEF
-Herkunft und Originale liegen unter ../rules/en16931/, ../rules/basic/ und
-../rules/extended/, jeweils mit PROVENANCE.md. Gemeinsame Lizenztexte liegen
+Herkunft und Originale liegen unter ../rules/en16931/, ../rules/basic/,
+../rules/extended/ und ../rules/xrechnung/, jeweils mit PROVENANCE.md.
+XRechnung enthält zusätzlich eigene KoSIT-/CEN-Lizenztexte; UN/CEFACT-Bedingungen
+stehen in den Original-XSDs. Gemeinsame Factur-X-Lizenztexte liegen
 unter ../rules/en16931/. EXTENDED enthält eine dokumentierte numerische
 Kompatibilitätsanpassung in der Compilerkopie; die Originale bleiben unverändert.
 
