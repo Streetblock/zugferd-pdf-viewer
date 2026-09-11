@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="src/validation.js" defer></script>
     <script src="src/lib.js" defer></script>
+    <script src="vendor/SaxonJS2.rt.js" defer></script>
     <script src="app.js" defer></script>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-start p-2 md:p-4 overflow-auto">
@@ -22,7 +23,7 @@
                     <span class="material-icons-outlined">description</span>
                     ZUGFeRD Viewer
                 </h1>
-                <p class="text-slate-400 text-sm mt-1">XML anzeigen · EN 16931 und PDF/A-3 lokal prüfen</p>
+                <p class="text-slate-400 text-sm mt-1">XML anzeigen · EN 16931 im Browser prüfen</p>
             </div>
             <div id="status-badge" class="hidden px-3 py-1 rounded-full text-xs font-semibold bg-gray-600">
                 Warte auf Datei...
@@ -31,7 +32,7 @@
 
         <div class="p-4 md:p-5">
             <div class="validation-intro">
-                <p id="validator-status" role="status">Browsermodus ohne Java: Anzeige und Profilprüfung. Vollständige XSD-, Schematron- und PDF/A-3-Prüfung noch nicht verfügbar.</p>
+                <p id="validator-status" role="status">XSD und Schematron für das Profil EN 16931 direkt im Browser. Die PDF/A-3-Prüfung ist noch offen.</p>
                 <label><input type="checkbox" id="b2g-context"> Rechnung an öffentliche Verwaltung: Käuferreferenz auf Vorhandensein prüfen</label>
                 <button id="new-file" type="button" class="viewer-button">Datei auswählen</button>
             </div>
@@ -44,7 +45,7 @@
 
             <div id="loader" class="hidden flex flex-col items-center justify-center py-8">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                <p class="mt-4 text-gray-600">Analysiere PDF Struktur...</p>
+                <p class="mt-4 text-gray-600">Lese Rechnungsdatei …</p>
             </div>
 
             <div id="error-box" class="hidden mt-4 bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm">

@@ -1,0 +1,13 @@
+{
+  "mustangVersion": "2.26.0",
+  "jarSha256": "42d7868cb68264874a7b8cab4c3587b03b23ccc7cd72373da917f66758bb9736",
+  "sourceFiles": {
+    "source/FACTUR-X_EN16931_codedb.xml": "dd3856984b69e25d5ba6312ec7c8f68e4458064a5998bebcfe8ae66de1a21cad",
+    "source/FACTUR-X_EN16931.xsd": "34e51a9b26c95ef6e09297051b9921a05279a4024e659f236ba5d5e0f5a23bec",
+    "source/FACTUR-X_EN16931_urn_un_unece_uncefact_data_standard_QualifiedDataType_100.xsd": "5a3ce756cfa8d4f2ff3165d68123cfb7fbf3c7b64664edb0de38cca64d5c413b",
+    "source/FACTUR-X_EN16931_urn_un_unece_uncefact_data_standard_ReusableAggregateBusinessInformationEntity_100.xsd": "4a091d4339eddab30f6f5d29364ca2297607d72f03af7da2786637f08bdb3cf7",
+    "source/FACTUR-X_EN16931_urn_un_unece_uncefact_data_standard_UnqualifiedDataType_100.xsd": "f87a1b78d2b7177955957002f8c2a7917e326038d38803f875266cc7579ea857",
+    "source/FACTUR-X_EN16931.xslt": "d412c035cd790e0ea0de36b59f58a868f4d1a28bc2072fc2204f23dbeb2850d7"
+  },
+  "saxonBrowserSha256": "7704990d3bfd64e6621ddf3939943be13a8cc20c17687e0f2dd1ca3d03434e88"
+}

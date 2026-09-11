@@ -1,0 +1,23 @@
+ZUGFeRD Viewer – mitgelieferte XML-Laufzeiten
+
+SaxonJS 2.7
+Copyright Saxonica Ltd. Kostenlos nutzbar, nicht Open Source.
+Die Datei SaxonJS2.rt.js wird unverändert als Bestandteil dieser Anwendung
+ausgeliefert. Vollständige Bedingungen und Haftungsausschluss:
+SaxonJS-LICENSE.txt im selben Verzeichnis.
+Original: https://downloads.saxonica.com/SaxonJS/2/SaxonJS-2.7.zip
+SHA-256 der Browserdatei:
+7704990d3bfd64e6621ddf3939943be13a8cc20c17687e0f2dd1ca3d03434e88
+
+libxml2-wasm 0.7.2
+Copyright James Lan. MIT-Lizenz: libxml2-wasm-LICENSE.
+Enthält libxml2; dessen Lizenz: libxml2-LICENSE.txt.
+Der Browser-Build in ../dist/xml-validator.mjs enthält diese JS-/WASM-Laufzeit.
+Quelle: https://github.com/jameslan/libxml2-wasm
+
+Regeln und abgeleitetes SEF
+Herkunft, Originale und Lizenztexte liegen unter ../rules/en16931/.
+Weitere Informationen: ../rules/en16931/PROVENANCE.md.
+
+Mustangproject selbst wird nicht mit der Anwendung ausgeliefert. Es dient
+ausschließlich als optionale Entwicklungsreferenz.

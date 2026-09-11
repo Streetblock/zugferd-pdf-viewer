@@ -348,12 +348,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 { label: "Adresse", value: data.buyerAddress, multiline: true }
             ]);
             renderDetailFields("val-seller-details", [
-                { label: "USt-Id", value: data.sellerVatId },
-                { label: "Weitere Steuerkennung", value: data.sellerTaxReference },
+                { label: "USt-IdNr.", value: cleanValue(data.sellerVatId) || "Nicht im XML angegeben" },
+                { label: "Steuernummer", value: data.sellerTaxReference },
                 { label: "Kommunikations-ID", value: data.sellerCommunicationId }
             ]);
             renderDetailFields("val-buyer-details", [
-                { label: "USt-Id", value: data.buyerVatId, showUnknown: true }
+                { label: "USt-IdNr.", value: cleanValue(data.buyerVatId) || "Nicht im XML angegeben" }
             ]);
             setText("val-buyer-reference", data.buyerReference);
             setText("val-payment-means", formatPaymentMeans(data.paymentMeans));
@@ -576,18 +576,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 const health = await response.json();
                 this.localValidator = Boolean(health.available);
                 document.getElementById('validator-status').textContent = health.available
-                    ? `${health.engine} bereit. Dateien werden ausschließlich auf diesem Rechner geprüft; temporäre Prüfdateien werden anschließend gelöscht.`
-                    : 'Browsermodus ohne Java. Vollständige XML-/PDF/A-Prüfung noch offen. Entwickler können Mustang separat im Referenzmodus starten.';
+                    ? `XML-Prüfung im Browser. Zusätzlich ${health.engine} als Entwicklungsreferenz aktiv: Originaldateien werden zur Vergleichsprüfung an diesen lokalen Server gesendet.`
+                    : 'XSD und Schematron für das Profil EN 16931 direkt im Browser. Die PDF/A-3-Prüfung ist noch offen.';
             } catch {
                 this.localValidator = false;
-                document.getElementById('validator-status').textContent = 'Lokaler Validator nicht erreichbar. Konformität kann derzeit nicht bestätigt werden.';
+                document.getElementById('validator-status').textContent = 'XML-Prüfung im Browser. Keine zusätzliche Mustang-Entwicklungsreferenz erreichbar.';
             }
         }
 
         renderValidation(result, pending = false) {
             const summary = window.InvoiceValidation.summary(result);
             const element = document.getElementById('validation-summary');
-            element.textContent = pending ? 'Vollprüfung läuft: XSD, Schematron und gegebenenfalls PDF/A-3 …' : summary.label;
+            element.textContent = pending ? 'XML-Prüfung läuft: XSD und Schematron …' : summary.label;
             element.dataset.status = pending ? 'unknown' : summary.status;
             this.updateStatus(pending ? 'Prüfung läuft' : summary.label, pending || summary.status === 'unknown' ? 'bg-yellow-500' : summary.status === 'fail' ? 'bg-red-500' : 'bg-green-500');
             document.getElementById('retry-validation').disabled = pending;
@@ -607,7 +607,7 @@ document.addEventListener("DOMContentLoaded", () => {
             issues.replaceChildren();
             for (const issue of result.issues) {
                 const line = document.createElement('p'); line.className = 'validation-issue';
-                line.textContent = `${issue.severity.toUpperCase()} ${issue.rule} ${issue.location}\n${issue.message}`;
+                line.textContent = `${issue.severity.toUpperCase()} ${issue.rule} ${issue.location || ''}\n${issue.message}`;
                 issues.append(line);
             }
             if (!result.issues.length) issues.textContent = 'Keine Detailmeldungen vorhanden. Offene Prüfungen oben beachten.';
@@ -652,6 +652,29 @@ document.addEventListener("DOMContentLoaded", () => {
                 this.xmlData = xmlData;
                 this.validationResult = result;
                 this.renderInvoice(invoiceData, xmlData.filename);
+                this.renderValidation(result, true);
+                try {
+                    // Serialize use of the shared WASM instance. An older file must never
+                    // paint its result over a newer selection.
+                    const previous = this.xmlJob || Promise.resolve();
+                    const job = previous.catch(() => {}).then(async () => {
+                        if (selection !== this.selectionId) return;
+                        this.xmlValidatorPromise ||= import('./dist/xml-validator.mjs').then(m => m.createValidator()).catch(error => {
+                            this.xmlValidatorPromise = null; throw error;
+                        });
+                        const validator = await this.xmlValidatorPromise;
+                        if (selection !== this.selectionId) return;
+                        return validator.validateXml(xmlData.bytes);
+                    });
+                    this.xmlJob = job;
+                    const xmlReport = await job;
+                    if (selection !== this.selectionId) return;
+                    V.applyXmlReport(result, xmlReport);
+                } catch (error) {
+                    if (selection !== this.selectionId) return;
+                    result.issues.push({ severity: 'warning', rule: 'JS-ENGINE', message: error.message });
+                }
+                if (selection !== this.selectionId) return;
                 this.renderValidation(result);
                 await this.detectValidator();
                 if (selection !== this.selectionId) return;
@@ -668,7 +691,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         if (!response.ok) throw new Error(report.error || 'Validator nicht verfügbar.');
                         if (report.sourceSha256 !== result.sourceSha256) throw new Error('Dateiprüfsumme stimmt nicht mit dem Bericht überein.');
                         if (selection !== this.selectionId) return;
-                        V.applyReport(result, report, result.xmlSha256);
+                        V.applyReferenceComparison(result, report);
                     } catch (error) {
                         if (selection !== this.selectionId) return;
                         result.checks.push({ id: 'service', status: 'unknown', title: 'Vollprüfung nicht abgeschlossen', detail: error.message });

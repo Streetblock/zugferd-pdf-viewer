@@ -1,0 +1,4 @@
+# Rules and vendor files are verified by their byte hashes on every platform.
+rules/** -text
+vendor/** -text
+dist/** -text

@@ -32,7 +32,7 @@ window.InvoiceValidation = (() => {
             return id.endsWith(':basicwl') ? 'BASIC-WL' : id.split(':').pop().toUpperCase();
         }
         if (/^urn:cen\.eu:en16931:2017#conformant#urn:(factur-x\.eu:1p0|zugferd\.de:2p0):extended$/.test(id)) return 'EXTENDED';
-        if (/^urn:cen\.eu:en16931:2017#compliant#urn:zugferd\.de:2p0:basic$/.test(id)) return 'BASIC';
+        if (/^urn:cen\.eu:en16931:2017#compliant#urn:(factur-x\.eu:1p0|zugferd\.de:2p0):basic$/.test(id)) return 'BASIC';
         if (/^urn:cen\.eu:en16931:2017#compliant#urn:xeinkauf\.de:kosit:xrechnung_[0-9]+\.[0-9]+$/.test(id)) return 'XRECHNUNG';
         if (id.startsWith('urn:ferd:CrossIndustryDocument:invoice:1p0:')) return 'ZUGFeRD 1 (veraltet)';
         return 'Unbekannt';
@@ -60,12 +60,42 @@ window.InvoiceValidation = (() => {
             check('reference', b2g && !reference ? 'fail' : 'info', 'Käuferreferenz / Leitweg-ID',
                 b2g ? (reference ? `Vorhanden: ${reference}. Zuordnung und Leitweg-ID-Prüfziffer nicht geprüft. Dies ist keine vollständige B2G-/XRechnung-Prüfung.` : 'Für den gewählten B2G-Kontext fehlt BuyerReference (BT-10).')
                     : (reference ? `Vorhanden: ${reference}.` : 'Im allgemeinen B2B-Kontext nicht pauschal verpflichtend.')),
-            check('xml', 'unknown', 'XSD und Schematron', 'Noch nicht geprüft. Vollprüfung mit lokalem Mustang-Validator erforderlich.'),
+            check('xml', 'unknown', 'XSD und Schematron', 'JavaScript-Prüfung noch nicht abgeschlossen.'),
             check('pdf', isPdf ? 'unknown' : 'info', 'PDF/A-3 und Einbettung', isPdf ? 'Noch nicht geprüft.' : 'Bei einer reinen XML-Datei nicht anwendbar.'),
             check('authority', 'info', 'XML ist die Datenquelle', 'Alle angezeigten Rechnungswerte stammen aus dem XML. Ein inhaltlicher Abgleich mit dem PDF-Bild erfolgt nicht.'),
             check('archive', 'info', 'Original aufbewahren', 'Originaldatei bzw. ursprüngliches XML unversehrt aufbewahren. Download und SHA-256-Prüfsumme sind kein revisionssicheres Archiv; GoBD-Prozesse werden hier nicht geprüft.')
         ];
         return { profile: name, profileId: id, buyerCountry, isPdf, b2g, checks, issues: [] };
+    }
+
+    function applyXmlReport(result, report) {
+        if (report.sourceSha256 !== result.xmlSha256) throw new Error('XML-Prüfsumme stimmt nicht mit dem JS-Bericht überein.');
+        const passed = report.status === 'valid' && report.profileId === result.profileId
+            && report.xsd.status === 'valid' && report.schematron.status === 'valid' && report.schematron.fired > 0;
+        const status = passed ? 'pass' : report.status === 'invalid' ? 'fail' : 'unknown';
+        const detail = passed ? `EN16931-Profilregeln bestanden: XSD und ${report.schematron.fired} ausgeführte Schematron-Regeln. ${report.ruleset}.`
+            : report.status === 'unsupported' ? 'Dieses Profil wird angezeigt, aber von der JS-Prüfung noch nicht unterstützt.'
+            : status === 'fail' ? 'Die XML-Prüfung meldet Fehler. Regelkennungen und Fundstellen stehen unter „Fehler und Warnungen“.'
+            : 'Die XML-Prüfung wurde nicht vollständig abgeschlossen. Siehe Detailmeldungen.';
+        result.checks = result.checks.map(c => c.id === 'xml' ? check('xml', status, 'XSD und Schematron (JavaScript)', detail) : c);
+        result.xmlValidation = report;
+        result.issues = report.issues;
+        result.engine = report.engine;
+        result.checkedAt = report.checkedAt;
+        return result;
+    }
+
+    // Keep the independent JS result authoritative in the normal viewer. Reference-only
+    // extras are retained in the download, including PDF/A; they cannot turn a JS failure green.
+    function applyReferenceComparison(result, response) {
+        const reference = applyReport({ ...result, checks: result.checks.filter(c => c.id !== 'reference-engine'), issues: [] }, response, result.xmlSha256);
+        const jsStatus = result.checks.find(c => c.id === 'xml')?.status;
+        const referenceStatus = reference.checks.find(c => c.id === 'xml')?.status;
+        result.referenceValidation = reference;
+        result.checks.push(check('reference-engine', jsStatus === referenceStatus ? 'info' : 'unknown', 'Mustang-Entwicklungsreferenz',
+            jsStatus === referenceStatus ? 'XML-Ergebnis stimmt überein. Zusätzliche Mustang-Prüfungen stehen separat im JSON-Bericht.'
+                : 'XML-Ergebnisse weichen ab oder sind nicht vergleichbar. Separate Berichte im JSON-Download prüfen.'));
+        return result;
     }
 
     function applyReport(result, response, xmlHash) {
@@ -120,12 +150,13 @@ window.InvoiceValidation = (() => {
 
     function summary(result) {
         if (result.checks.some(c => c.status === 'fail')) return { label: 'Prüfung: Fehler gefunden', status: 'fail' };
-        if (result.checks.some(c => c.status === 'unknown')) return { label: 'Konformität noch nicht bestätigt', status: 'unknown' };
+        if (result.checks.some(c => c.status === 'unknown')) return { label: result.isPdf && result.checks.find(c => c.id === 'xml')?.status === 'pass'
+            ? 'XML bestanden · PDF/A-Prüfung offen' : 'Konformität noch nicht bestätigt', status: 'unknown' };
         return { label: 'Technische Prüfung bestanden', status: 'pass' };
     }
     async function hash(bytes) {
         const value = await crypto.subtle.digest('SHA-256', bytes);
         return [...new Uint8Array(value)].map(b => b.toString(16).padStart(2, '0')).join('');
     }
-    return { decode, parse, profile, preflight, applyReport, summary, hash };
+    return { decode, parse, profile, preflight, applyXmlReport, applyReferenceComparison, applyReport, summary, hash };
 })();

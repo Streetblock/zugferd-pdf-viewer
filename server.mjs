@@ -9,7 +9,11 @@ const assets = new Map([
     ['/', ['index.html', 'text/html']], ['/index.html', ['index.html', 'text/html']],
     ['/app.js', ['app.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']],
     ['/src/lib.js', ['src/lib.js', 'text/javascript']],
-    ['/src/validation.js', ['src/validation.js', 'text/javascript']]
+    ['/src/validation.js', ['src/validation.js', 'text/javascript']],
+    ['/vendor/SaxonJS2.rt.js', ['vendor/SaxonJS2.rt.js', 'text/javascript']],
+    ['/dist/xml-validator.mjs', ['dist/xml-validator.mjs', 'text/javascript']],
+    ...['manifest.json', 'schemas.json', 'en16931.sef.json', 'source/FACTUR-X_EN16931_codedb.xml'].map(name =>
+        ['/rules/en16931/' + name, ['rules/en16931/' + name, name.endsWith('.xml') ? 'application/xml' : 'application/json']])
 ]);
 
 export function createServer({ ready = false, runner = null, engine = 'Browsermodus' } = {}) {
@@ -56,10 +60,11 @@ export function createServer({ ready = false, runner = null, engine = 'Browsermo
         const asset = req.method === 'GET' && assets.get(req.url);
         if (!asset) { reply(404, { error: 'Nicht gefunden.' }); return; }
         try {
+            const bytes = await readFile(path.join(root, asset[0]));
             res.writeHead(200, { 'Content-Type': `${asset[1]}; charset=utf-8`, 'Cache-Control': 'no-store',
                 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
-            res.end(await readFile(path.join(root, asset[0])));
-        } catch { res.end(); }
+            res.end(bytes);
+        } catch { reply(404, { error: 'Datei fehlt. Bitte Build prüfen.' }); }
     });
 }
 
@@ -70,6 +75,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const server = createServer({ ready, runner: reference?.validate, engine });
     server.requestTimeout = 30000;
     server.listen(8765, '127.0.0.1', () => {
-        console.log(`Viewer: http://127.0.0.1:8765 — ${engine}: ${ready ? 'Referenzprüfung bereit' : 'keine Vollprüfung aktiv'}`);
+        console.log(`Viewer: http://127.0.0.1:8765 — XML-Prüfung im Browser; ${ready ? 'Mustang-Referenz zusätzlich bereit' : 'ohne Java'}`);
     });
 }
