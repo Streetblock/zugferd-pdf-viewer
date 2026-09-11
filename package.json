@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test tests/validation.test.mjs tests/server.test.mjs",
+    "test": "node --test tests/validation.test.mjs tests/server.test.mjs tests/xml-validator.test.mjs",
+    "build": "node tools/build-validator.mjs",
     "dev:reference": "node server.mjs --reference",
     "test:reference": "node --test tests/reference.test.mjs",
     "reference": "node tools/reference.mjs"
@@ -12,6 +13,12 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "jsdom": "26.1.0"
+    "esbuild": "0.25.12",
+    "jsdom": "26.1.0",
+    "xslt3": "2.7.0"
+  },
+  "dependencies": {
+    "libxml2-wasm": "0.7.2",
+    "saxon-js": "2.7.0"
   }
 }

@@ -16,6 +16,20 @@ const report = (pdf = '', status = 'valid', fired = 104) => ({ engine: 'Test', a
 test('Browser checks never certify a well-formed but unvalidated invoice', () => {
     assert.equal(V.summary(V.preflight(xml)).status, 'unknown');
 });
+test('JS reports bind exact XML bytes and keep incomplete stages open', () => {
+    const make = () => ({ ...V.preflight(xml), xmlSha256: 'xml-hash' });
+    const valid = { sourceSha256: 'xml-hash', profileId: profile, status: 'valid', xsd: { status: 'valid' }, schematron: { status: 'valid', fired: 61 }, issues: [] };
+    assert.equal(V.summary(V.applyXmlReport(make(), valid)).status, 'pass');
+    assert.throws(() => V.applyXmlReport(make(), { ...valid, sourceSha256: 'other-hash' }), /Prüfsumme/);
+    assert.equal(V.summary(V.applyXmlReport(make(), { ...valid, schematron: { status: 'valid', fired: 0 } })).status, 'unknown');
+    const pdf = { ...V.preflight(xml, { isPdf: true }), xmlSha256: 'xml-hash' };
+    assert.equal(V.summary(V.applyXmlReport(pdf, valid)).label, 'XML bestanden · PDF/A-Prüfung offen');
+    const failed = V.applyXmlReport(make(), { ...valid, status: 'invalid' });
+    V.applyReferenceComparison(failed, report());
+    assert.equal(V.summary(failed).status, 'fail');
+    assert.equal(failed.xmlValidation.status, 'invalid');
+    assert.equal(failed.referenceValidation.checks.find(c => c.id === 'xml').status, 'pass');
+});
 test('BASIC is allowed; MINIMUM and BASIC-WL are excluded; unknown lookalikes stay unknown', () => {
     for (const name of ['minimum', 'basicwl', 'basic']) {
         const result = V.preflight(xml.replace(profile, `urn:factur-x.eu:1p0:${name}`));
