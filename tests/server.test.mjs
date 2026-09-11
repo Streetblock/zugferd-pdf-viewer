@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from '../server.mjs';
+import { PROFILE_PACKS } from '../src/xml-validator/profiles.mjs';
 
 test('Normal viewer serves files with reference validation disabled', async t => {
     const server = createServer();
@@ -10,7 +11,8 @@ test('Normal viewer serves files with reference validation disabled', async t =>
     const health = await (await fetch(url + '/api/health')).json();
     assert.equal(health.available, false);
     assert.equal((await fetch(url + '/')).status, 200);
-    for (const asset of ['/dist/xml-validator.mjs', '/vendor/SaxonJS2.rt.js', '/rules/en16931/manifest.json', '/rules/en16931/schemas.json', '/rules/en16931/en16931.sef.json', '/rules/en16931/source/FACTUR-X_EN16931_codedb.xml']) {
+    for (const asset of ['/dist/xml-validator.mjs', '/vendor/SaxonJS2.rt.js', ...PROFILE_PACKS.flatMap(p =>
+        ['manifest.json', 'schemas.json', p.key + '.sef.json', 'source/' + p.stem + '_codedb.xml'].map(n => '/rules/' + p.key + '/' + n))]) {
         const response = await fetch(url + asset);
         assert.equal(response.status, 200, asset);
         assert.ok((await response.text()).length > 100, asset);

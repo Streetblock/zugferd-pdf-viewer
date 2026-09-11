@@ -54,9 +54,10 @@ window.InvoiceValidation = (() => {
         const excluded = ['MINIMUM', 'BASIC-WL', 'ZUGFeRD 1 (veraltet)'].includes(name);
         const checks = [
             check('syntax', 'pass', 'XML lesbar', 'CII-Namensraum erkannt. Wohlgeformtheit ersetzt keine XSD-Prüfung.'),
-            check('profile', excluded ? 'fail' : name === 'Unbekannt' ? 'unknown' : 'pass', `Profil: ${name}`,
+            check('profile', excluded ? 'fail' : name === 'Unbekannt' ? 'unknown' : 'info', `Profilkennung: ${name}`,
                 excluded ? 'Dieses Profil genügt nicht als vollständige deutsche B2B-E-Rechnung.'
-                : `${id || 'Profilkennung fehlt.'} — Die Profilkennung allein ist kein Konformitätsnachweis. BASIC ist grundsätzlich zulässig; bei ZUGFeRD gilt dies ab Version 2.0.1. Die genaue Unterversion ist nicht immer aus der XML-Kennung bestimmbar.`),
+                : `${id || 'Profilkennung fehlt.'} — Die Profilkennung allein ist kein Konformitätsnachweis.`
+                    + (name === 'BASIC' ? ' BASIC ist grundsätzlich zulässig; bei ZUGFeRD gilt dies ab Version 2.0.1. Die genaue Unterversion ist nicht immer aus der XML-Kennung bestimmbar.' : ' Das XML-Ergebnis steht separat unter XSD und Schematron.')),
             check('reference', b2g && !reference ? 'fail' : 'info', 'Käuferreferenz / Leitweg-ID',
                 b2g ? (reference ? `Vorhanden: ${reference}. Zuordnung und Leitweg-ID-Prüfziffer nicht geprüft. Dies ist keine vollständige B2G-/XRechnung-Prüfung.` : 'Für den gewählten B2G-Kontext fehlt BuyerReference (BT-10).')
                     : (reference ? `Vorhanden: ${reference}.` : 'Im allgemeinen B2B-Kontext nicht pauschal verpflichtend.')),
@@ -73,7 +74,7 @@ window.InvoiceValidation = (() => {
         const passed = report.status === 'valid' && report.profileId === result.profileId
             && report.xsd.status === 'valid' && report.schematron.status === 'valid' && report.schematron.fired > 0;
         const status = passed ? 'pass' : report.status === 'invalid' ? 'fail' : 'unknown';
-        const detail = passed ? `EN16931-Profilregeln bestanden: XSD und ${report.schematron.fired} ausgeführte Schematron-Regeln. ${report.ruleset}.`
+        const detail = passed ? `${result.profile}-Profilregeln bestanden: XSD und ${report.schematron.fired} ausgeführte Schematron-Regeln. ${report.ruleset}.`
             : report.status === 'unsupported' ? 'Dieses Profil wird angezeigt, aber von der JS-Prüfung noch nicht unterstützt.'
             : status === 'fail' ? 'Die XML-Prüfung meldet Fehler. Regelkennungen und Fundstellen stehen unter „Fehler und Warnungen“.'
             : 'Die XML-Prüfung wurde nicht vollständig abgeschlossen. Siehe Detailmeldungen.';
@@ -149,10 +150,12 @@ window.InvoiceValidation = (() => {
     }
 
     function summary(result) {
-        if (result.checks.some(c => c.status === 'fail')) return { label: 'Prüfung: Fehler gefunden', status: 'fail' };
+        if (result.checks.find(c => c.id === 'xml')?.status === 'fail') return { label: `XML-Prüfung: Regelfehler · Profil ${result.profile}`, status: 'fail' };
+        if (result.checks.some(c => c.status === 'fail')) return { label: 'Prüfung: Anforderungen nicht erfüllt', status: 'fail' };
+        if (result.xmlValidation?.status === 'unsupported') return { label: `XML-Profil ${result.profile}: noch nicht unterstützt`, status: 'unknown' };
         if (result.checks.some(c => c.status === 'unknown')) return { label: result.isPdf && result.checks.find(c => c.id === 'xml')?.status === 'pass'
             ? 'XML bestanden · PDF/A-Prüfung offen' : 'Konformität noch nicht bestätigt', status: 'unknown' };
-        return { label: 'Technische Prüfung bestanden', status: 'pass' };
+        return { label: `XML-Prüfung bestanden · Profil ${result.profile}`, status: 'pass' };
     }
     async function hash(bytes) {
         const value = await crypto.subtle.digest('SHA-256', bytes);

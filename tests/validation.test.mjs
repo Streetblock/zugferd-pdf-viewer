@@ -33,9 +33,31 @@ test('JS reports bind exact XML bytes and keep incomplete stages open', () => {
 test('BASIC is allowed; MINIMUM and BASIC-WL are excluded; unknown lookalikes stay unknown', () => {
     for (const name of ['minimum', 'basicwl', 'basic']) {
         const result = V.preflight(xml.replace(profile, `urn:factur-x.eu:1p0:${name}`));
-        assert.equal(result.checks.find(c => c.id === 'profile').status, name === 'basic' ? 'pass' : 'fail');
+        assert.equal(result.checks.find(c => c.id === 'profile').status, name === 'basic' ? 'info' : 'fail');
     }
     assert.equal(V.profile('fake:en16931:extended'), 'Unbekannt');
+});
+test('Profile-specific success, unsupported and broken engines remain distinct', () => {
+    for (const name of ['basic', 'extended']) {
+        const id = profile + (name === 'basic' ? '#compliant#' : '#conformant#') + 'urn:factur-x.eu:1p0:' + name;
+        for (const alias of [id, id.replace('factur-x.eu:1p0', 'zugferd.de:2p0')]) {
+            const make = () => ({ ...V.preflight(xml.replace(profile, alias)), xmlSha256: 'hash' });
+            const report = { sourceSha256: 'hash', profileId: alias, status: 'valid', ruleset: name + ' rules',
+                xsd: { status: 'valid' }, schematron: { status: 'valid', fired: 1 }, issues: [] };
+            const passed = V.applyXmlReport(make(), report);
+            assert.equal(V.summary(passed).label, 'XML-Prüfung bestanden · Profil ' + name.toUpperCase());
+            assert.ok(passed.checks.find(c => c.id === 'xml').detail.startsWith(name.toUpperCase() + '-Profilregeln'));
+            assert.equal(V.summary(V.applyXmlReport(make(), { ...report, status: 'invalid' })).status, 'fail');
+            assert.equal(V.summary(V.applyXmlReport(make(), { ...report, status: 'not-checked' })).status, 'unknown');
+        }
+    }
+    const id = profile + '#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0';
+    const result = V.applyXmlReport({ ...V.preflight(xml.replace(profile, id)), xmlSha256: 'hash' }, {
+        sourceSha256: 'hash', profileId: id, status: 'unsupported', xsd: {}, schematron: {}, issues: []
+    });
+    assert.equal(V.summary(result).status, 'unknown');
+    assert.equal(result.checks.find(c => c.id === 'profile').status, 'info');
+    assert.match(V.summary(result).label, /XRECHNUNG: noch nicht unterstützt/);
 });
 test('Buyer reference is only required by optional B2G context', () => {
     assert.equal(V.preflight(xml).checks.find(c => c.id === 'reference').status, 'info');

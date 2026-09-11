@@ -16,8 +16,10 @@ Der Browser-Build in ../dist/xml-validator.mjs enthält diese JS-/WASM-Laufzeit.
 Quelle: https://github.com/jameslan/libxml2-wasm
 
 Regeln und abgeleitetes SEF
-Herkunft, Originale und Lizenztexte liegen unter ../rules/en16931/.
-Weitere Informationen: ../rules/en16931/PROVENANCE.md.
+Herkunft und Originale liegen unter ../rules/en16931/, ../rules/basic/ und
+../rules/extended/, jeweils mit PROVENANCE.md. Gemeinsame Lizenztexte liegen
+unter ../rules/en16931/. EXTENDED enthält eine dokumentierte numerische
+Kompatibilitätsanpassung in der Compilerkopie; die Originale bleiben unverändert.
 
 Mustangproject selbst wird nicht mit der Anwendung ausgeliefert. Es dient
 ausschließlich als optionale Entwicklungsreferenz.

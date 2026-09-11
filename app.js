@@ -577,7 +577,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 this.localValidator = Boolean(health.available);
                 document.getElementById('validator-status').textContent = health.available
                     ? `XML-Prüfung im Browser. Zusätzlich ${health.engine} als Entwicklungsreferenz aktiv: Originaldateien werden zur Vergleichsprüfung an diesen lokalen Server gesendet.`
-                    : 'XSD und Schematron für das Profil EN 16931 direkt im Browser. Die PDF/A-3-Prüfung ist noch offen.';
+                    : 'XSD und Schematron für BASIC, EN16931 und EXTENDED direkt im Browser. Die PDF/A-3-Prüfung ist noch offen.';
             } catch {
                 this.localValidator = false;
                 document.getElementById('validator-status').textContent = 'XML-Prüfung im Browser. Keine zusätzliche Mustang-Entwicklungsreferenz erreichbar.';

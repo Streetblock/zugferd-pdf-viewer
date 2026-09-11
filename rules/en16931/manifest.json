@@ -1,11 +1,12 @@
 {
+  "profileKey": "en16931",
   "ruleset": "Factur-X EN16931 ZF_250, bundled with Mustangproject 2.26.0",
   "source": "https://github.com/ZUGFeRD/mustangproject/tree/core-2.26.0/validator/src/main/resources",
   "compiler": "xslt3 2.7.0",
   "compilerInputAdaptation": "Virtual xml:base added to compiler copy; rule expressions unchanged.",
   "files": {
     "schemas.json": "2f72c1e84a1267e0a072b217c7e2f5ee3e556463fac0f719bfca0c4863814cad",
-    "en16931.sef.json": "7d804e3862c87d04d8fe9e937dfdced4e3d9ff0bd64f61f82b906b539c422ea8",
+    "en16931.sef.json": "203c881f395ece31de7cb9d3731e0ca9971524ca21ac42e865dec7899526fb73",
     "source/FACTUR-X_EN16931_codedb.xml": "dd3856984b69e25d5ba6312ec7c8f68e4458064a5998bebcfe8ae66de1a21cad",
     "source/FACTUR-X_EN16931.xsd": "34e51a9b26c95ef6e09297051b9921a05279a4024e659f236ba5d5e0f5a23bec",
     "source/FACTUR-X_EN16931_urn_un_unece_uncefact_data_standard_QualifiedDataType_100.xsd": "5a3ce756cfa8d4f2ff3165d68123cfb7fbf3c7b64664edb0de38cca64d5c413b",

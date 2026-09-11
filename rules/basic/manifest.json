@@ -1,0 +1,17 @@
+{
+  "profileKey": "basic",
+  "ruleset": "Factur-X BASIC ZF_250, bundled with Mustangproject 2.26.0",
+  "source": "https://github.com/ZUGFeRD/mustangproject/tree/core-2.26.0/validator/src/main/resources",
+  "compiler": "xslt3 2.7.0",
+  "compilerInputAdaptation": "Virtual xml:base added to compiler copy; rule expressions unchanged.",
+  "files": {
+    "schemas.json": "cb66d371050d538a06f3f10bb52e3bbad3c4474af1f37040312226f9e4e04f0d",
+    "basic.sef.json": "a69759081ae397058c3b5fc40fb32b806c9b103246e8ce2f98d0172145e14130",
+    "source/FACTUR-X_BASIC_codedb.xml": "eb7478effd5f709aa45b4fee97a678c115dd521432ef832c6960180c727da436",
+    "source/FACTUR-X_BASIC.xsd": "1335ce8d9311fd88d68c713c3bd441cd0fb036fe7d94c9d3267b9fb4c16733f3",
+    "source/FACTUR-X_BASIC_urn_un_unece_uncefact_data_standard_QualifiedDataType_100.xsd": "fd6958ad55567fbffb127b62b80d9cc76039a6f90315b81cba890646b824743f",
+    "source/FACTUR-X_BASIC_urn_un_unece_uncefact_data_standard_ReusableAggregateBusinessInformationEntity_100.xsd": "b1695d72a47f21b73cb6b9b65f1d77cae8d311a18f20288608b5a92ffd381a32",
+    "source/FACTUR-X_BASIC_urn_un_unece_uncefact_data_standard_UnqualifiedDataType_100.xsd": "0386218417686704266ee06991ab0312d46317757a87378246593c328bc64fd6",
+    "source/FACTUR-X_BASIC.xslt": "372cfdef6e429332dd0f43cccfc119af276dd657359e18489b08222c514ce3aa"
+  }
+}

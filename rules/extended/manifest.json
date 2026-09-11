@@ -1,0 +1,21 @@
+{
+  "profileKey": "extended",
+  "ruleset": "Factur-X EXTENDED ZF_250, bundled with Mustangproject 2.26.0",
+  "source": "https://github.com/ZUGFeRD/mustangproject/tree/core-2.26.0/validator/src/main/resources",
+  "compiler": "xslt3 2.7.0",
+  "compilerInputAdaptations": [
+    "Virtual xml:base for local resource resolution.",
+    "SaxonJS 2.7 numeric-promotion workaround: four xs:decimal(100) literals become 100 in BR-FXEXT-CO-10 and BR-FXEXT-CO-13; original SVRL test text retained."
+  ],
+  "compilerInputSha256": "42eb9ab764d30ea55a13f8528358e140e30290ad82f60172da50eb44a0539a25",
+  "files": {
+    "schemas.json": "540d6ecfd23e43920b0551daef6e4ba70561e3289f3ce37c2f3f63d219f91209",
+    "extended.sef.json": "fe31b4af285a5c3cfd402762435607a8e2cdb94db214da39bcb8d22d9b257ecb",
+    "source/FACTUR-X_EXTENDED_codedb.xml": "2ab4fe294111a5703828b1dc2314280a75612be2063376f53eb863023dc48faa",
+    "source/FACTUR-X_EXTENDED.xsd": "766afbb866c03b6936a70f8c302307d8ea1c9e43328676c942072be60094f393",
+    "source/FACTUR-X_EXTENDED_urn_un_unece_uncefact_data_standard_QualifiedDataType_100.xsd": "fd1e3ae9d887ce4e17f7056e6f7bccee1ff54040ff41069ff85710782d0df640",
+    "source/FACTUR-X_EXTENDED_urn_un_unece_uncefact_data_standard_ReusableAggregateBusinessInformationEntity_100.xsd": "2d2e776f7262a7835de09bd5b14206a97680dbf3702d0d2f1670a7147d183670",
+    "source/FACTUR-X_EXTENDED_urn_un_unece_uncefact_data_standard_UnqualifiedDataType_100.xsd": "4600ae4633a5467e4d302b80bc91362a901be9bcdfe49584de72295428d39de3",
+    "source/FACTUR-X_EXTENDED.xslt": "cb9ba4c20d6b9830b63926b654ecc9472d67bf9c33a7cda0786faabd6f221bc7"
+  }
+}

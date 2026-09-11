@@ -1,6 +1,7 @@
 import { XmlDocument, XsdValidator, ParseOption, XmlBufferInputProvider, xmlRegisterInputProvider } from 'libxml2-wasm';
 
-export const PROFILE_ID = 'urn:cen.eu:en16931:2017';
+import { PROFILE_PACKS } from './profiles.mjs';
+export { PROFILE_ID, SUPPORTED_PROFILES } from './profiles.mjs';
 export const MAX_XML_BYTES = 5 * 1024 * 1024;
 const NS = {
     rsm: 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100',
@@ -19,16 +20,19 @@ export async function sha256(bytes) {
 }
 
 /** Pure JS/WASM validation. loadAsset reads only the shipped rules, never invoice URLs. */
-export async function createValidator({ SaxonJS, loadAsset }) {
-    if (!SaxonJS?.transform || !loadAsset) throw new Error('XML-Laufzeit oder Regeldateien fehlen.');
-    const manifest = JSON.parse(await loadAsset('manifest.json'));
+async function loadRules(pack, SaxonJS, loadAsset) {
+    const asset = name => loadAsset(pack.key + '/' + name);
+    const manifest = JSON.parse(await asset('manifest.json'));
+    if (manifest.profileKey !== pack.key) throw new Error('Regelpaket passt nicht zum erkannten Profil.');
+    const sefName = pack.key + '.sef.json';
+    const codesName = pack.stem + '_codedb.xml';
     const verified = async name => {
-        const text = await loadAsset(name);
+        const text = await asset(name);
         if (await sha256(encoder.encode(text)) !== manifest.files[name]) throw new Error(`Regeldatei beschädigt: ${name}`);
         return text;
     };
     const [schemasText, sefText, codesText] = await Promise.all([
-        verified('schemas.json'), verified('en16931.sef.json'), verified('source/FACTUR-X_EN16931_codedb.xml')
+        verified('schemas.json'), verified(sefName), verified('source/' + codesName)
     ]);
     const schemas = JSON.parse(schemasText);
     const base = `https://zugferd-rules.invalid/${manifest.files['schemas.json']}/`;
@@ -36,18 +40,28 @@ export async function createValidator({ SaxonJS, loadAsset }) {
     let schemaDoc;
     let schema;
     try {
-        schemaDoc = XmlDocument.fromString(schemas['FACTUR-X_EN16931.xsd'], { ...OPTIONS, url: base + 'FACTUR-X_EN16931.xsd' });
+        schemaDoc = XmlDocument.fromString(schemas[pack.stem + '.xsd'], { ...OPTIONS, url: base + pack.stem + '.xsd' });
         schema = XsdValidator.fromDoc(schemaDoc);
     } finally { schemaDoc?.dispose(); }
     let codes;
     let sef;
-    try { sef = JSON.parse(sefText); codes = await SaxonJS.getResource({ text: codesText, type: 'xml', baseURI: base + 'FACTUR-X_EN16931_codedb.xml' }); }
+    try { sef = JSON.parse(sefText); codes = await SaxonJS.getResource({ text: codesText, type: 'xml', baseURI: base + codesName }); }
     catch (error) { schema.dispose(); throw error; }
+    return { schema, sef, codes, base, manifest, sefName, codesName };
+}
+
+export async function createValidator({ SaxonJS, loadAsset }) {
+    if (!SaxonJS?.transform || !loadAsset) throw new Error('XML-Laufzeit oder Regeldateien fehlen.');
+    // A failed load is not cached: retrying after a missing asset is restored works.
+    const loaded = new Map();
     let disposed = false;
     let busy = false;
 
     return {
-        dispose() { if (busy) throw new Error('Prüfung läuft.'); if (!disposed) { schema.dispose(); disposed = true; } },
+        dispose() {
+            if (busy) throw new Error('Prüfung läuft.');
+            if (!disposed) { for (const rules of loaded.values()) rules.schema.dispose(); loaded.clear(); disposed = true; }
+        },
         async validateXml(input) {
             if (disposed) throw new Error('Validator wurde geschlossen.');
             if (busy) throw new Error('Diese Validator-Instanz prüft bereits eine Datei.');
@@ -59,9 +73,8 @@ export async function createValidator({ SaxonJS, loadAsset }) {
             busy = true;
             let doc, svrl;
             const result = {
-                status: 'not-checked', profileId: '', scope: 'ZUGFeRD/Factur-X EN 16931 XML',
-                engine: 'libxml2-wasm 0.7.2 + SaxonJS 2.7.0', ruleset: manifest.ruleset,
-                rulesetSha256: manifest.files['en16931.sef.json'],
+                status: 'not-checked', profileId: '', profile: '', scope: 'ZUGFeRD/Factur-X XML',
+                engine: 'libxml2-wasm 0.7.2 + SaxonJS 2.7.0', ruleset: '', rulesetSha256: '',
                 sourceSha256: '', checkedAt: new Date().toISOString(),
                 xsd: { status: 'not-checked' }, schematron: { status: 'not-checked', fired: 0 }, issues: []
             };
@@ -81,11 +94,21 @@ export async function createValidator({ SaxonJS, loadAsset }) {
                     return result;
                 }
                 result.profileId = content(doc, '/rsm:CrossIndustryInvoice/rsm:ExchangedDocumentContext/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID');
-                if (result.profileId !== PROFILE_ID) {
+                const pack = PROFILE_PACKS.find(p => p.ids.includes(result.profileId));
+                if (!pack) {
                     result.status = result.profileId ? 'unsupported' : 'invalid';
-                    result.issues.push({ severity: result.profileId ? 'warning' : 'error', stage: 'profile', rule: 'PROFILE-UNSUPPORTED', message: 'Diese erste JS-Version prüft ausschließlich das Profil EN 16931. Die Profilkennung fehlt oder wird noch nicht unterstützt.' });
+                    result.issues.push({ severity: result.profileId ? 'warning' : 'error', stage: 'profile', rule: result.profileId ? 'PROFILE-UNSUPPORTED' : 'PROFILE-MISSING', message: 'Die Profilkennung fehlt oder wird noch nicht unterstützt. Unterstützt: BASIC, EN16931 und EXTENDED mit den festgelegten Profilkennungen.' });
                     return result;
                 }
+                result.profile = pack.label;
+                result.scope = `ZUGFeRD/Factur-X ${pack.label} XML`;
+                let rules = loaded.get(pack.key);
+                if (!rules) { rules = await loadRules(pack, SaxonJS, loadAsset); loaded.set(pack.key, rules); }
+                const { schema, sef, codes, base, manifest, sefName, codesName } = rules;
+                result.ruleset = manifest.ruleset;
+                result.rulesetSha256 = manifest.files[sefName];
+                result.schemaSha256 = manifest.files['schemas.json'];
+                result.compilerInputAdaptations = manifest.compilerInputAdaptations || [manifest.compilerInputAdaptation].filter(Boolean);
                 try { schema.validate(doc); result.xsd.status = 'valid'; }
                 catch (error) {
                     result.xsd.status = 'invalid';
@@ -96,9 +119,9 @@ export async function createValidator({ SaxonJS, loadAsset }) {
                     return result; // Prevent arithmetic/cast failures on schema-invalid data.
                 }
                 const transformed = await SaxonJS.transform({
-                    stylesheetInternal: sef, stylesheetBaseURI: base + 'en16931.sef.json',
+                    stylesheetInternal: sef, stylesheetBaseURI: base + sefName,
                     sourceText: doc.toString({ encoding: 'utf-8' }), sourceBaseURI: 'urn:invoice:input',
-                    documentPool: { [base + 'FACTUR-X_EN16931_codedb.xml']: codes },
+                    documentPool: { [base + codesName]: codes },
                     destination: 'serialized', nonInteractive: true
                 }, 'async');
                 result.svrl = transformed.principalResult;
