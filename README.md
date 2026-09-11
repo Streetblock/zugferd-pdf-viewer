@@ -1,7 +1,7 @@
 # ZUGFeRD Viewer
 
 Der Viewer liest Rechnungs-XML aus PDF-Anhängen oder XML-Dateien und prüft
-**XSD und Schematron für das Profil EN 16931 direkt im Browser**. Derselbe
+**XSD und Schematron für BASIC, EN16931 und EXTENDED direkt im Browser**. Derselbe
 Prüfkern funktioniert in Node. Die Laufzeit benötigt **kein Java und keinen
 Validierungsserver**. Mustangproject bleibt eine optionale Entwicklungsreferenz.
 
@@ -23,7 +23,9 @@ von externen Quellen; die gesamte Anwendung ist daher noch nicht offline gebünd
 
 ## Prüfumfang und Grenzen
 
-- CII `CrossIndustryInvoice:100`, Profil `urn:cen.eu:en16931:2017`.
+- CII `CrossIndustryInvoice:100`, Profile BASIC, EN16931 und EXTENDED.
+- Automatische Auswahl anhand exakter Profilkennungen. BASIC und EXTENDED
+  unterstützen die Kennungen sowohl von Factur-X als auch von ZUGFeRD.
 - Original-XSDs und profilbezogene Schematron-Regeln einschließlich Codelisten
   aus dem Mustang-Regelstand `ZF_250`. Keine automatische Auswahl sämtlicher
   ZUGFeRD-Unterversionen.
@@ -33,12 +35,18 @@ von externen Quellen; die gesamte Anwendung ist daher noch nicht offline gebünd
 - Status `valid`, `invalid`, `unsupported` oder `not-checked`. Nur vollständig
   abgeschlossene XSD- und Schematron-Prüfungen können `valid` ergeben.
 
-BASIC, EXTENDED und XRechnung werden weiterhin angezeigt, erhalten in dieser
-JS-Version aber **keine positive XML-Konformitätsbestätigung**. BASIC wird nicht
-pauschal als unzulässig behandelt; MINIMUM und BASIC-WL werden als für vollständige
+XRechnung wird weiterhin angezeigt, erhält in dieser JS-Version aber **keine
+positive XML-Konformitätsbestätigung**. UBL wird noch nicht verarbeitet.
+MINIMUM und BASIC-WL werden als für vollständige
 deutsche B2B-E-Rechnungen ungeeignet ausgewiesen. Der B2G-Schalter prüft nur das
 Vorhandensein von BuyerReference, keine vollständige XRechnung, Leitweg-ID-Prüfziffer
 oder Empfängerzuordnung.
+
+Die Anzeige trennt „XML-Prüfung bestanden · Profil …“, „XML-Prüfung: Regelfehler“
+und „noch nicht unterstützt“. Ein erfolgreiches BASIC-/EXTENDED-Ergebnis bestätigt
+die jeweils angegebenen Profilregeln, nicht pauschal alle EN16931-Ausprägungen.
+Ein unbekanntes Profil oder ein Lade-/Laufzeitfehler kann keine grüne Bestätigung
+erzeugen. Es gibt keinen automatischen Rückfall auf ein anderes Regelpaket.
 
 Die vorhandene PDF-Extraktion liefert die ursprünglichen XML-Bytes an denselben
 Prüfkern. Mehrere mögliche Rechnungsanhänge führen zum Abbruch. Eine PDF mit
@@ -86,9 +94,15 @@ Browser, auf HTTP-Loopback oder HTTPS:
 Die API akzeptiert `Uint8Array`/Node `Buffer`, `ArrayBuffer` und UTF-8-Text.
 Originalbytes sind insbesondere für UTF-16 und andere Kodierungen vorzuziehen.
 `createValidator({ assetBaseUrl })` erlaubt im Browser einen anderen Ablageort
-der mitgelieferten Regeln; SaxonJS muss vorher geladen sein. Initialisierungs-,
-Parameter- und Parallelitätsfehler werfen Exceptions. Laufzeitfehler innerhalb
-einer Prüfung ergeben `not-checked` mit Detailmeldung.
+der Regeln; die URL bezeichnet jetzt den gemeinsamen Ordner `rules/` mit den
+Unterordnern `basic/`, `en16931/`, `extended/` (zuvor direkt `rules/en16931/`).
+`SUPPORTED_PROFILES` exportiert alle fünf unterstützten Kennungen. Die Pakete
+werden erst beim ersten Dokument des jeweiligen Profils geladen und je Instanz
+wiederverwendet. `dispose()` gibt alle geladenen XSD-Validatoren frei.
+SaxonJS muss vorher geladen sein. Parameter- und Parallelitätsfehler werfen
+Exceptions. Fehler beim Laden eines Regelpakets und bei seiner Ausführung
+ergeben `not-checked` mit Detailmeldung. Ein fehlgeschlagener Ladevorgang wird
+beim nächsten Prüfversuch wiederholt.
 
 ## Bauen und testen
 
@@ -99,11 +113,16 @@ node tools/prepare-browser-tests.mjs
 ```
 
 Der Build benötigt kein Java und keine Netzverbindung. Er prüft die Original-
-Hashes aus `rules/en16931/source-lock.json`, bündelt XSDs, kompiliert das XSLT
+Hashes aus `rules/<profil>/source-lock.json`, bündelt XSDs, kompiliert das XSLT
 mit `xslt3` zum SEF und baut das Browsermodul mit eingebettetem libxml2-WASM.
 Nur die Compilerkopie erhält ein virtuelles `xml:base`, damit persönliche
-Dateipfade nicht im SEF landen. Regel-Ausdrücke und mitgelieferte Originale
-bleiben unverändert. Compiler-Metadaten können sich beim Neubauen ändern.
+Dateipfade nicht im SEF landen. Für EXTENDED enthält `tools/compiler-input.mjs`
+zusätzlich eine explizite SaxonJS-2.7-Kompatibilitätsanpassung an zwei numerischen
+Ausdrücken. Grenzen und Rundungen bleiben erhalten; Originale und SVRL-Testtexte
+bleiben unverändert. Die Anpassung und ihr Compiler-Eingabehash stehen im Manifest,
+die Anpassung auch im JSON-Prüfbericht. Siehe [EXTENDED-Regelherkunft](rules/extended/PROVENANCE.md).
+Compiler-Metadaten können sich beim Neubauen ändern. Mit `npm run build -- basic`
+oder `npm run build -- extended` lassen sich einzelne Pakete gezielt neu bauen.
 
 Normale Tests brauchen kein Java. Sie umfassen positive und negative Rechnungen,
 Summen, Steuerangaben, Codes, XSD-Datentypen, Kodierungen, nicht unterstützte
@@ -121,8 +140,12 @@ npm run test:reference
 npm run reference -- tests/fixtures/invoice.xml referenz.json
 ```
 
-Sieben EN16931-Fälle werden mit Mustang verglichen, einschließlich identischer
-Regelkennungen für Summen-, Steuer- und Codefehler. Mustang ergänzt eigene
+27 Fälle für EN16931, BASIC und EXTENDED werden mit Mustang verglichen,
+einschließlich Profilaliasen, Summen-/Codefehlern, XSD-Fehlern und der Abgrenzung
+EXTENDED-spezifischer Felder. Acht Fälle prüfen separat die positiven und negativen
+Toleranzgrenzen der beiden angepassten EXTENDED-Rechenregeln. Dort wird die konkrete
+Regelmeldung verglichen, da Mustang zusätzlich eigene Rechenprüfungen ausführt.
+Mustang ergänzt außerdem
 Rechenprüfungen, XRechnung-Hinweise und kontextabhängig weitere Regeln. Diese
 Zusatzprüfungen sind nicht Teil der JS-Engine; vollständige Meldungslisten und
 Regelanzahlen müssen daher nicht gleich sein.
@@ -145,7 +168,8 @@ bei einem Rechner-/Prozessabsturz können Kopien im Temp-Verzeichnis verbleiben.
 
 ## Herkunft und Lizenzen
 
-Siehe [Regelherkunft](rules/en16931/PROVENANCE.md) und
+Siehe die Regelherkunft für [EN16931](rules/en16931/PROVENANCE.md),
+[BASIC](rules/basic/PROVENANCE.md), [EXTENDED](rules/extended/PROVENANCE.md) und
 [Drittanbieter-Hinweise](vendor/NOTICE.txt). SaxonJS ist kostenlos nutzbar,
 aber **nicht Open Source**. Die Browserdatei bleibt unverändert; ihre Bedingungen
 gelten auch bei einer späteren eigenständigen Bibliotheksauslieferung.
@@ -156,6 +180,6 @@ gelten auch bei einer späteren eigenständigen Bibliotheksauslieferung.
 - [BMF-FAQ](https://www.bundesfinanzministerium.de/Content/DE/FAQ/e-rechnung.html)
 - [FeRD: Profile](https://www.ferd-net.de/standards/zugferd-faq)
 
-Als Nächstes: mehr Profile mit eigenen Referenzfällen, Worker-Ausführung und
+Als Nächstes: XRechnung und UBL mit eigenen Referenzfällen, Worker-Ausführung und
 eine Java-freie PDF/A-Engine mit nachgewiesenem Prüfumfang. Metadaten allein
 dürfen keine PDF/A-Konformität bestätigen.

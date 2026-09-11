@@ -2,6 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PROFILE_PACKS } from './src/xml-validator/profiles.mjs';
 const root = path.dirname(fileURLToPath(import.meta.url));
 const MAX_BYTES = 20 * 1024 * 1024;
 
@@ -12,8 +13,8 @@ const assets = new Map([
     ['/src/validation.js', ['src/validation.js', 'text/javascript']],
     ['/vendor/SaxonJS2.rt.js', ['vendor/SaxonJS2.rt.js', 'text/javascript']],
     ['/dist/xml-validator.mjs', ['dist/xml-validator.mjs', 'text/javascript']],
-    ...['manifest.json', 'schemas.json', 'en16931.sef.json', 'source/FACTUR-X_EN16931_codedb.xml'].map(name =>
-        ['/rules/en16931/' + name, ['rules/en16931/' + name, name.endsWith('.xml') ? 'application/xml' : 'application/json']])
+    ...PROFILE_PACKS.flatMap(pack => ['manifest.json', 'schemas.json', pack.key + '.sef.json', 'source/' + pack.stem + '_codedb.xml'].map(name =>
+        ['/rules/' + pack.key + '/' + name, ['rules/' + pack.key + '/' + name, name.endsWith('.xml') ? 'application/xml' : 'application/json']]))
 ]);
 
 export function createServer({ ready = false, runner = null, engine = 'Browsermodus' } = {}) {
