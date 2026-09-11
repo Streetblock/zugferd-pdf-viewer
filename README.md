@@ -6,6 +6,17 @@ direkt im Browser**. Derselbe
 Prüfkern funktioniert in Node. Die Laufzeit benötigt **kein Java und keinen
 Validierungsserver**. Mustangproject bleibt eine optionale Entwicklungsreferenz.
 
+Dieser Branch `feat/external-epc-qr` ergänzt den GiroCode-Bereich: Für
+EUR-Rechnungen mit Zahlungsart 30 oder 58 erzeugt er den EPC-Zahlungspayload
+aus den XML-Zahlungsdaten und zeigt den QR-Code über die bestehenden
+Bibliotheken `epc-qr-payload` und `QR-Atelier`. Sind diese nicht verfügbar,
+bleibt der lokal erzeugte Payload sichtbar. Bei einem Dateiwechsel werden
+die vorherigen Zahlungsdaten und die QR-Anzeige zurückgesetzt.
+
+Die Prüfungs-Commits für EN16931, BASIC, EXTENDED und XRechnung sowie die
+kompakte Prüfanzeige wurden von `main` per Cherry-Pick übernommen. Der
+Prüfkern und die Regelpakete sind auf beiden Branches identisch.
+
 ## Starten
 
 ```powershell
