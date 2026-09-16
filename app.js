@@ -119,9 +119,6 @@ async function loadOptionalModules() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    if (typeof pdfjsLib !== "undefined") {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-    }
 
     class UIManager {
         constructor(optionalModules = null) {
@@ -198,6 +195,9 @@ document.addEventListener("DOMContentLoaded", () => {
             this.dropZone.classList.remove("hidden");
             this.validationResult = null;
             this.xmlData = null;
+            this.errorText.textContent = '';
+            document.getElementById('download-report').disabled = true;
+            document.getElementById('download-xml').disabled = true;
         }
 
         showLoading() {
@@ -483,7 +483,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 this.localValidator = Boolean(health.available);
                 document.getElementById('validator-status').textContent = health.available
                     ? `XML-Prüfung im Browser. Zusätzlich ${health.engine} als Entwicklungsreferenz aktiv: Originaldateien werden zur Vergleichsprüfung an diesen lokalen Server gesendet.`
-                    : 'XSD und Schematron für BASIC, EN16931, EXTENDED und XRechnung 3.0 (CII) direkt im Browser. Die PDF/A-3-Prüfung ist noch offen.';
+                    : 'XSD und Schematron für BASIC, EN16931, EXTENDED und XRechnung 3.0 (CII) direkt im Browser. PDF-Einbettung und Metadaten werden lokal auf Basisanforderungen geprüft. Die PDF/A-3-Vollprüfung bleibt offen.';
             } catch {
                 this.localValidator = false;
                 document.getElementById('validator-status').textContent = 'XML-Prüfung im Browser. Keine zusätzliche Mustang-Entwicklungsreferenz erreichbar.';
@@ -497,6 +497,7 @@ document.addEventListener("DOMContentLoaded", () => {
             element.dataset.status = pending ? 'unknown' : summary.status;
             this.updateStatus(pending ? 'Prüfung läuft' : summary.label, pending || summary.status === 'unknown' ? 'bg-yellow-500' : summary.status === 'fail' ? 'bg-red-500' : 'bg-green-500');
             document.getElementById('download-report').disabled = pending;
+            document.getElementById('download-xml').disabled = !this.xmlData;
             const warnings = result.issues.filter(i => i.severity === 'warning').length;
             document.getElementById('validation-counts').textContent = !pending && warnings
                 ? `${warnings} ${warnings === 1 ? 'Warnung' : 'Warnungen'}` : '';
@@ -546,7 +547,7 @@ document.addEventListener("DOMContentLoaded", () => {
             try {
                 const V = window.InvoiceValidation;
                 const originalBytes = new Uint8Array(await file.arrayBuffer());
-                const xmlData = isPdf ? await new PDFAttachmentExtractor().extractXML(file)
+                const xmlData = isPdf ? await new PDFAttachmentExtractor().extractXML(originalBytes)
                     : { filename: file.name, bytes: originalBytes, content: V.decode(originalBytes) };
                 if (selection !== this.selectionId) return;
                 const result = V.preflight(xmlData.content, { isPdf, b2g: document.getElementById('b2g-context').checked });
@@ -554,6 +555,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 result.xmlFilename = xmlData.filename;
                 result.sourceSha256 = await V.hash(originalBytes);
                 result.xmlSha256 = await V.hash(xmlData.bytes);
+                if (isPdf) V.applyPdfReport(result, xmlData.pdfReport);
                 if (selection !== this.selectionId) return;
                 const parser = new InvoiceXMLParser(xmlData.content);
                 const invoiceData = parser.parse();

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
+import { extractInvoice } from '../src/pdf-validation.mjs';
 const dom = new JSDOM('', { runScripts: 'outside-only' });
 dom.window.TextDecoder = TextDecoder;
 dom.window.TextEncoder = TextEncoder;
@@ -113,10 +114,10 @@ test('Original UTF-16 bytes decode correctly', () => {
 });
 test('Multiple invoice attachments fail closed and PDF resources are destroyed', async () => {
     let destroyed = false;
-    dom.window.pdfjsLib = { getDocument: () => ({ promise: Promise.resolve({
-        getAttachments: async () => ({ a: { filename: 'factur-x.xml', content: new TextEncoder().encode(xml) }, b: { filename: 'second.xml', content: new TextEncoder().encode(xml) } }),
-        destroy: async () => { destroyed = true; }
-    }) }) };
-    await assert.rejects(new dom.window.PDFAttachmentExtractor().extractXML({ arrayBuffer: async () => new ArrayBuffer(0) }), /Mehrere/);
+    const file = { filename: { type: 'string', value: 'factur-x.xml' }, embeddedFiles: [{ stream: { bytes: new TextEncoder().encode(xml) } }] };
+    const pdfjs = { getDocument: () => ({ promise: Promise.resolve({
+        getEmbeddedFileInspection: async () => ({ version: 1, files: [file, { ...file }] })
+    }), destroy: async () => { destroyed = true; } }) };
+    await assert.rejects(extractInvoice(new Uint8Array([1]), { pdfjs, parseXml: V.parse, decodeXml: V.decode, profileOf: V.profile }), /Mehrere/);
     assert.equal(destroyed, true);
 });

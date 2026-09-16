@@ -3,15 +3,17 @@
   "private": true,
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test tests/validation.test.mjs tests/server.test.mjs tests/xml-validator.test.mjs tests/xrechnung.test.mjs",
+    "test": "node --test tests/validation.test.mjs tests/server.test.mjs tests/xml-validator.test.mjs tests/xrechnung.test.mjs tests/pdf-validation.test.mjs",
     "build": "node tools/build-validator.mjs",
     "dev:reference": "node server.mjs --reference",
     "test:reference": "node --test tests/reference.test.mjs",
     "test:kosit": "node --test tests/kosit-reference.test.mjs",
-    "reference": "node tools/reference.mjs"
+    "reference": "node tools/reference.mjs",
+    "vendor:pdfjs": "node tools/vendor-pdfjs.mjs",
+    "test:pdf-browser": "node tools/test-pdf-browser.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.22.3"
   },
   "devDependencies": {
     "esbuild": "0.25.12",

@@ -11,6 +11,12 @@ const assets = new Map([
     ['/app.js', ['app.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']],
     ['/src/lib.js', ['src/lib.js', 'text/javascript']],
     ['/src/validation.js', ['src/validation.js', 'text/javascript']],
+    ['/src/pdf-validation.mjs', ['src/pdf-validation.mjs', 'text/javascript']],
+    ['/vendor/pdfjs/pdf.mjs', ['vendor/pdfjs/pdf.mjs', 'text/javascript']],
+    ['/vendor/pdfjs/pdf.worker.mjs', ['vendor/pdfjs/pdf.worker.mjs', 'text/javascript']],
+    ['/vendor/pdfjs/manifest.json', ['vendor/pdfjs/manifest.json', 'application/json']],
+    ['/vendor/pdfjs/LICENSE', ['vendor/pdfjs/LICENSE', 'text/plain']],
+    ['/vendor/pdfjs/NOTICE', ['vendor/pdfjs/NOTICE', 'text/plain']],
     ['/vendor/SaxonJS2.rt.js', ['vendor/SaxonJS2.rt.js', 'text/javascript']],
     ['/dist/xml-validator.mjs', ['dist/xml-validator.mjs', 'text/javascript']],
     ...PROFILE_PACKS.flatMap(pack => ruleAssets(pack).map(name =>

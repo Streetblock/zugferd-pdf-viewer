@@ -64,11 +64,23 @@ window.InvoiceValidation = (() => {
                 : b2g ? (reference ? `Vorhanden: ${reference}. Der Schalter prüft nur das Vorhandensein; Zuordnung und Leitweg-ID-Prüfziffer werden nicht geprüft.` : 'Für den gewählten B2G-Kontext fehlt BuyerReference (BT-10).')
                     : (reference ? `Vorhanden: ${reference}.` : 'Im allgemeinen B2B-Kontext nicht pauschal verpflichtend.')),
             check('xml', 'unknown', 'XSD und Schematron', 'JavaScript-Prüfung noch nicht abgeschlossen.'),
-            check('pdf', isPdf ? 'unknown' : 'info', 'PDF/A-3 und Einbettung', isPdf ? 'Noch nicht geprüft.' : 'Bei einer reinen XML-Datei nicht anwendbar.'),
+            ...(isPdf ? [check('embedding', 'unknown', 'XML-Einbettung (Basisprüfungen)', 'Noch nicht abgeschlossen.'),
+                check('metadata', 'unknown', 'Metadaten (Basisprüfungen)', 'Noch nicht abgeschlossen.')] : []),
+            check('pdf', isPdf ? 'unknown' : 'info', 'PDF/A-3-Konformität (Vollprüfung)', isPdf ? 'Noch nicht implementiert.' : 'Bei einer reinen XML-Datei nicht anwendbar.'),
             check('authority', 'info', 'XML ist die Datenquelle', 'Alle angezeigten Rechnungswerte stammen aus dem XML. Ein inhaltlicher Abgleich mit dem PDF-Bild erfolgt nicht.'),
             check('archive', 'info', 'Original aufbewahren', 'Originaldatei bzw. ursprüngliches XML unversehrt aufbewahren. Download und SHA-256-Prüfsumme sind kein revisionssicheres Archiv; GoBD-Prozesse werden hier nicht geprüft.')
         ];
         return { profile: name, profileId: id, buyerCountry, isPdf, b2g, checks, issues: [] };
+    }
+
+    function applyPdfReport(result, report) {
+        if (!report || report.sourceSha256 !== result.sourceSha256 || report.xmlSha256 !== result.xmlSha256) {
+            throw new Error('PDF- oder XML-Prüfsumme stimmt nicht mit dem Einbettungsbericht überein.');
+        }
+        result.pdfValidation = report;
+        result.checks = result.checks.map(c => report.checks.find(p => p.id === c.id) || c);
+        result.issues = [...report.issues, ...(result.xmlValidation?.issues || [])];
+        return result;
     }
 
     function applyXmlReport(result, report) {
@@ -85,7 +97,7 @@ window.InvoiceValidation = (() => {
             : 'Die XML-Prüfung wurde nicht vollständig abgeschlossen. Siehe Detailmeldungen.';
         result.checks = result.checks.map(c => c.id === 'xml' ? check('xml', status, 'XSD und Schematron (JavaScript)', detail) : c);
         result.xmlValidation = report;
-        result.issues = report.issues;
+        result.issues = [...(result.pdfValidation?.issues || []), ...report.issues];
         result.engine = report.engine;
         result.checkedAt = report.checkedAt;
         return result;
@@ -125,6 +137,7 @@ window.InvoiceValidation = (() => {
             const passed = statusOf(pdf) === 'valid' && /isCompliant=true/.test(pdfText) && /flavour=3[abu]/.test(pdfText);
             replace(check('pdf', passed ? 'pass' : pdf ? 'fail' : 'unknown', 'PDF/A-3 (veraPDF) und XMP',
                 passed ? 'PDF/A-3-Prüfung und Mustang-XMP-Prüfung bestanden.' : 'PDF/A-3-Konformität nicht bestätigt. Siehe Originalbericht.'));
+            replace(check('metadata', passed ? 'pass' : pdf ? 'fail' : 'unknown', 'Metadaten (Mustang-Referenz)', passed ? 'Mustang-XMP-Ergebnis bestätigt.' : 'Kein bestätigtes Mustang-XMP-Ergebnis.'));
             const attachment = response.attachments?.find(a => a.sha256 === xmlHash);
             let state = 'unknown', detail = 'Der geprüfte PDF-Anhang konnte nicht eindeutig an das angezeigte XML gebunden werden.';
             if (attachment) {
@@ -135,7 +148,7 @@ window.InvoiceValidation = (() => {
                 detail = `MIME: ${attachment.mime || 'fehlt'}; AFRelationship: ${attachment.relationship || 'fehlt'}; im Dokument-AF: ${attachment.associated ? 'ja' : 'nein'}.`
                     + (sourceCase ? ' Source kann bei ausländischem Empfänger und aus XML erzeugtem PDF zulässig sein; Erzeugungsweg manuell prüfen.' : ' Für deutsche Empfänger wird Alternative erwartet.');
             }
-            result.checks.push(check('embedding', state, 'XML-Einbettung', detail));
+            replace(check('embedding', state, 'XML-Einbettung (Mustang-Referenz)', detail));
         }
         result.issues = [...root.querySelectorAll('error, fatal, exception, warning, notice')].map(n => ({
             severity: n.localName, rule: n.getAttribute('id') || text(n).match(/\[ID ([^\]]+)\]/)?.[1] || n.getAttribute('type') || '',
@@ -159,12 +172,13 @@ window.InvoiceValidation = (() => {
         if (result.checks.some(c => c.status === 'fail')) return { label: 'Prüfung: Anforderungen nicht erfüllt', status: 'fail' };
         if (result.xmlValidation?.status === 'unsupported') return { label: `XML-Profil ${result.profile}: noch nicht unterstützt`, status: 'unknown' };
         if (result.checks.some(c => c.status === 'unknown')) return { label: result.isPdf && result.checks.find(c => c.id === 'xml')?.status === 'pass'
-            ? 'XML bestanden · PDF/A-Prüfung offen' : 'Konformität noch nicht bestätigt', status: 'unknown' };
+            ? (result.pdfValidation && ['embedding', 'metadata'].every(id => result.checks.find(c => c.id === id)?.status === 'pass')
+                ? 'XML und PDF-Basisprüfungen bestanden · PDF/A offen' : 'XML bestanden · PDF/A-Prüfung offen') : 'Konformität noch nicht bestätigt', status: 'unknown' };
         return { label: `XML-Prüfung bestanden · Profil ${result.profile}`, status: 'pass' };
     }
     async function hash(bytes) {
         const value = await crypto.subtle.digest('SHA-256', bytes);
         return [...new Uint8Array(value)].map(b => b.toString(16).padStart(2, '0')).join('');
     }
-    return { decode, parse, profile, preflight, applyXmlReport, applyReferenceComparison, applyReport, summary, hash };
+    return { decode, parse, profile, preflight, applyPdfReport, applyXmlReport, applyReferenceComparison, applyReport, summary, hash };
 })();
