@@ -8,6 +8,18 @@ function normalizeText(value) {
     return String(value ?? "").trim();
 }
 
+const displayAmountFormat = new Intl.NumberFormat('de-DE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+});
+
+function formatDisplayAmount(value, currency) {
+    const text = normalizeText(value);
+    const amount = text && Number.isFinite(Number(text))
+        ? displayAmountFormat.format(Number(text)) : text;
+    return `${amount} ${currency}`;
+}
+
 function normalizeAmount(value) {
     if (value === null || value === undefined || value === "") {
         throw new Error("Amount is missing.");
@@ -309,7 +321,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             setText("val-inv-number", data.invoiceNumber);
             setText("val-date", data.issueDate);
-            setText("val-total", `${data.totalAmount} ${data.currency}`);
+            setText("val-total", formatDisplayAmount(data.totalAmount, data.currency));
             setText("val-invoice-type", data.invoiceTypeDisplay);
             renderPartySummary("val-seller", data.sellerName, [
                 { label: "Ansprechpartner", value: data.sellerContactPerson },
@@ -335,8 +347,8 @@ document.addEventListener("DOMContentLoaded", () => {
             setText("val-due-date", data.dueDate);
             setText("val-iban", data.iban);
             setText("val-bic", data.bic);
-            setText("val-net-amount", `${data.netAmount} ${data.currency}`);
-            setText("val-tax-amount", `${data.taxAmount} ${data.currency}`);
+            setText("val-net-amount", formatDisplayAmount(data.netAmount, data.currency));
+            setText("val-tax-amount", formatDisplayAmount(data.taxAmount, data.currency));
             setText("val-line-count", data.lineItemCount);
             setText("val-filename", filename);
         }
@@ -389,11 +401,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 const payload = this.createPaymentPayload(paymentData);
                 this.currentPaymentPayload = payload;
                 this.paymentPanel.classList.remove("hidden");
-                this.paymentSummary.textContent = `${data.sellerName} | ${data.totalAmount} ${data.currency}`;
+                this.paymentSummary.textContent = `${data.sellerName} | ${formatDisplayAmount(data.totalAmount, data.currency)}`;
                 this.paymentRecipient.textContent = data.sellerName || "-";
                 this.paymentReference.textContent = paymentData.remittanceText || "-";
                 this.paymentIban.textContent = data.iban || "-";
-                this.paymentAmount.textContent = `${data.totalAmount} ${data.currency}`;
+                this.paymentAmount.textContent = formatDisplayAmount(data.totalAmount, data.currency);
                 this.paymentPayload.value = payload;
                 this.renderQrFromPayload(payload);
             } catch (error) {
