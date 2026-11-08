@@ -49,6 +49,18 @@ const fontRules = [
     { id: '6.2.11.4.1-2', clause: '6.2.11.4.1', label: 'Vorhandensein der verwendeten Glyphen im eingebetteten Schriftprogramm' },
     { id: '6.2.11.8-1', clause: '6.2.11.8', label: 'Keine Verwendung der Ersatzglyphe .notdef' },
 ];
+const colorRules = [
+    { id: 'PDF-OUTPUT-INTENT', specification: PDF_SPEC, clause: '14.11.5', label: 'Struktur der Output Intents' },
+    { id: 'PDF-ICC-STRUCTURE', specification: PDF_SPEC, clause: '8.6.5.5, 14.11.5',
+        label: 'ICC-Profilkopf, Tag-Grenzen und Komponentenanzahl' },
+    { id: '6.2.3-1', clause: '6.2.3', label: 'Klasse, Farbraum und Version der ICC-Ausgabeprofile' },
+    { id: '6.2.3-2', clause: '6.2.3', label: 'Gemeinsame ICC-Profilreferenz bei mehreren Output Intents' },
+    { id: '6.2.3-3', clause: '6.2.3', label: 'Kein externes Zielprofil in PDF/X-Output-Intents' },
+    { id: '6.2.4.2-1', clause: '6.2.4.2', label: 'Klasse, Farbraum und Version von ICCBased-Farbräumen' },
+    { id: '6.2.4.3-2', clause: '6.2.4.3', label: 'Verwendung von DeviceRGB mit passendem Standardfarbraum oder Ausgabeprofil' },
+    { id: '6.2.4.3-3', clause: '6.2.4.3', label: 'Verwendung von DeviceCMYK mit passendem Standardfarbraum oder Ausgabeprofil' },
+    { id: '6.2.4.3-4', clause: '6.2.4.3', label: 'Verwendung von DeviceGray mit Standardfarbraum oder PDF/A-Output-Intent' },
+];
 const xmpRules = [
     { id: '6.6.2.3.1-1', clause: '6.6.2.3.1', label: 'Definition der verwendeten XMP-Eigenschaften' },
     { id: '6.6.2.3.1-2', clause: '6.6.2.3.1', label: 'Wertetypen verwendeter XMP-Eigenschaften' },
@@ -199,7 +211,7 @@ function inspectChecks(definitions, inspection, defaultLocation) {
 }
 
 function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRequired = false }) {
-    const { trailer, xref, document: documentInspection, embeddedFiles, fonts } = inspection?.version === 1 ? inspection : {};
+    const { trailer, xref, document: documentInspection, embeddedFiles, fonts, colors } = inspection?.version === 1 ? inspection : {};
     const rules = [
         ...fileRules.slice(0, 2),
         inspectTrailerId(trailer?.id),
@@ -209,6 +221,7 @@ function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRe
         ...inspectChecks(documentRules, documentInspection, 'Dokumentstruktur'),
         ...inspectChecks(embeddedFileRules, embeddedFiles, 'Eingebettete Dateien'),
         ...inspectChecks(fontRules, fonts, 'Schriften und Glyphen'),
+        ...inspectChecks(colorRules, colors, 'Farbräume und Ausgabeprofile'),
         ...inspectChecks(xmpRules, xmpInspection, 'XMP-Metadaten'),
     ];
     return {
@@ -221,6 +234,7 @@ function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRe
         ...(documentInspection?.counts ? { documentCounts: documentInspection.counts } : {}),
         ...(embeddedFiles?.counts ? { embeddedFileCounts: embeddedFiles.counts } : {}),
         ...(fonts?.counts ? { fontCounts: fonts.counts } : {}),
+        ...(colors?.counts ? { colorCounts: colors.counts } : {}),
         ...(xmpInspection?.counts ? { xmpCounts: xmpInspection.counts } : {}),
     };
 }

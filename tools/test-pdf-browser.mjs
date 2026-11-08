@@ -12,6 +12,7 @@ import { makePdfaStructureCases } from '../tests/pdfa-structure-cases.mjs';
 import { makePdfaDocumentCases, makePdfaDocumentFixture } from '../tests/pdfa-document-cases.mjs';
 import { makePdfaEmbeddingCases } from '../tests/pdfa-embedding-cases.mjs';
 import { makePdfaFontCases, makePdfaFontFixture } from '../tests/pdfa-font-cases.mjs';
+import { makePdfaColorCases, makePdfaColorFixture } from '../tests/pdfa-color-cases.mjs';
 import { sha256, validatePdfA } from '../src/pdfa-validation.mjs';
 const fork = process.argv[2];
 const executablePath = process.argv[3] || process.env.PDFJS_TEST_BROWSER;
@@ -42,6 +43,10 @@ const cases = [
         'unknown', 'pass', 'pass'],
     ['missing-font-glyph.pdf', makePdfaFontFixture(xml, { font: 'cid', cid: 3 }),
         'fail', 'pass', 'pass', '6.2.11.4.1-2'],
+    ['rgb-output-intent.pdf', makePdfaColorFixture(xml, { intent: 'rgb' }), 'unknown', 'pass', 'pass'],
+    ['uncalibrated-rgb.pdf', makePdfaColorFixture(xml), 'fail', 'pass', 'pass', '6.2.4.3-2'],
+    ['icc-components.pdf', makePdfaColorFixture(xml, { icc: 'mismatch', paint: '/Icc cs 1 sc 0 0 10 10 re f' }),
+        'fail', 'pass', 'pass', 'PDF-ICC-STRUCTURE'],
     ['invoice.xml', new TextEncoder().encode(xml), 'pass', null, null],
 ];
 const server = createServer();
@@ -91,6 +96,12 @@ try {
                 }
                 assert.ok(report.pdfValidation.pdfA.fontCounts.glyphs > 0);
             }
+            if (name === 'rgb-output-intent.pdf') {
+                for (const id of ['6.2.3-1', '6.2.4.3-2']) {
+                    assert.equal(report.pdfValidation.pdfA.rules.find(rule => rule.id === id).status, 'pass', id);
+                }
+                assert.ok(report.pdfValidation.pdfA.colorCounts.outputIntents > 0);
+            }
             if (name === 'document-objects.pdf') {
                 assert.equal(report.pdfValidation.pdfA.documentCounts.pages, 2);
                 for (const id of ['PDF-CATALOG', 'PDF-PAGE-TREE', '6.3.1-1', '6.5.1-1']) {
@@ -112,6 +123,7 @@ try {
         ...makePdfaDocumentCases(xml),
         ...makePdfaEmbeddingCases(xml),
         ...makePdfaFontCases(xml),
+        ...makePdfaColorCases(xml),
     ];
     for (const { name, bytes } of standaloneCases) {
         const inBrowser = await page.evaluate(async input => {

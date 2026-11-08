@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { deflateSync } from 'node:zlib';
 const facturX = 'urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#';
 const facturXExtension = `<rdf:Description rdf:about=""
@@ -73,4 +74,21 @@ export function makePdf(xml, options = {}) {
         pdf += `xref\n1 1\n${String(offsets.get(1)).padStart(10, '0')} 00000 n \ntrailer\n<< /Size ${Math.max(...objects.keys()) + 1} /Root 1 0 R ${fileId} /Prev ${previous} >>\nstartxref\n${xref}\n%%EOF\n`;
     }
     return Uint8Array.from(Buffer.from(pdf, 'latin1'));
+}
+
+export function appendPdfRevision(base, entries) {
+    let pdf = Buffer.from(base).toString('latin1');
+    const footer = /\nstartxref\n(\d+)\n%%EOF\n$/.exec(pdf);
+    assert.ok(footer, 'Base fixture must contain a classic xref footer.');
+    const previous = Number(footer[1]);
+    const fileId = /\/ID \[<[^>]+> <[^>]+>\]/.exec(pdf.slice(previous))?.[0];
+    assert.ok(fileId, 'Base fixture must contain a file ID.');
+    const rows = [];
+    for (const [number, body] of [...entries].sort(([a], [b]) => a - b)) {
+        rows.push(`${number} 1\n${String(pdf.length).padStart(10, '0')} 00000 n \n`);
+        pdf += `${number} 0 obj\n${body}\nendobj\n`;
+    }
+    const offset = pdf.length;
+    const size = Math.max(...entries.keys(), 7) + 1;
+    return Buffer.from(pdf + `xref\n${rows.join('')}trailer\n<< /Size ${size} /Root 1 0 R ${fileId} /Prev ${previous} >>\nstartxref\n${offset}\n%%EOF\n`, 'latin1');
 }

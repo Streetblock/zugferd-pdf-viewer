@@ -290,9 +290,12 @@ Die drei getrennten Prüfzeilen bedeuten:
   Form-XObjects. Sie prüft die Einbettung verwendeter Schriftprogramme,
   das Vorhandensein verwendeter Glyphen und die Nutzung von .notdef
   ([Regeln 6.2.11.4.1 und 6.2.11.8](https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-621141-1)).
+  Die Farbprüfung untersucht Output Intents, die Struktur eingebetteter
+  ICC-Profile und verwendete Gerätefarbräume
+  ([Regeln 6.2.3 und 6.2.4](https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-623-1)).
   Ein eindeutiger Verstoß ergibt einen Fehler. Die Vollprüfung bleibt ohne
-  Verstoß offen. Dazu fehlen u. a. vollständige Schrift-, Farbraum- und
-  Inhaltsprüfungen.
+  Verstoß offen. Dazu fehlen u. a. vollständige Schrift-, Farb- und
+  Transparenzprüfungen.
 
 Ein grünes **Basis**-Ergebnis ist bewusst nur eine Aussage zu diesem Teilumfang.
 Es bestätigt keine vollständige Factur-X-, ZUGFeRD- oder PDF/A-Konformität.
@@ -364,6 +367,17 @@ veraPDF 1.30.2 meldete im entsprechenden CID-Testfall keinen .notdef-Verstoß.
 Die Wiederherstellung des Textmodus bei q/Q folgt dem PDF-Grafikzustand. Auch
 hier ließ die Referenzversion einen gezielt erzeugten Einbettungsfehler durch.
 
+Die Farbprüfung verfolgt den Grafikzustand beim Zeichnen von Pfaden, Text,
+Bildern und Form-XObjects. Verwendete Gerätefarben werden mit den passenden
+Standardfarbräumen oder dem eingebetteten PDF/A-Output-Intent abgeglichen.
+Die Prüfung liest ICC-Header und Tag-Verzeichnisse aus dem Original und prüft
+unter anderem Profilklasse, Farbraum, Version und die Komponentenzahl bei
+ICCBased-Farbräumen. Bei mehreren Output Intents wird der Verweis auf den
+gemeinsamen Profilstream geprüft. Der JSON-Bericht enthält colorCounts.
+ICC-Transformationen und weitere ICC-Anforderungen bleiben offen. Das gilt
+auch für Farbnutzung in Transparenzgruppen, Soft Masks, Mustern, Schattierungen,
+Inline-Bildern, Type-3-Glyphen und Anmerkungsdarstellungen.
+
 ### PDF.js aktualisieren
 
 Im separaten Fork alle Änderungen committen und anschließend bauen:
@@ -394,6 +408,13 @@ einen zusätzlichen Anhang mit fehlerhaftem MIME-Typ und fehlende oder fehlerhaf
 XMP-Erweiterungsdeklarationen bei weiterhin gültigem Rechnungs-XML.
 Schriftfälle unterscheiden verwendete, unbenutzte und unsichtbar verwendete
 Schriften, fehlende Glyphen und belegte .notdef-Zuordnungen.
+Die Farbfälle verwenden das RGB-Profil aus dem folgenden veraPDF-Beispiel.
+Sie prüfen unter anderem passende und fehlende Output Intents, Standardfarbräume,
+gleichlautende Profile in getrennten Streams und gezielt beschädigte ICC-Profile.
+Im Vergleich meldete veraPDF 1.30.2 Gerätefarben teils bereits beim Setzen des
+Farbraums. Unsere Prüfung meldet sie beim Zeichnen. Bei ungültiger ICC-Signatur,
+ungültigen Tag-Offsets und abweichender Komponentenzahl meldet die lokale
+Strukturprüfung Befunde, die veraPDF 1.30.2 in diesen Testfällen ausließ.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)

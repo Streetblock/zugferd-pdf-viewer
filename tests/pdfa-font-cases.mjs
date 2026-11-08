@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { deflateSync } from 'node:zlib';
-import { makePdf } from './pdf-fixtures.mjs';
+import { appendPdfRevision, makePdf } from './pdf-fixtures.mjs';
 
 // Original test font drawn for this suite with FontTools FontBuilder.
 // 1000 UPEM, glyph order [.notdef, A, space]. Glyph 0 is a box, glyph 1
@@ -29,23 +29,6 @@ function stream(data, entries = '', compressed = false) {
     const payload = compressed ? deflateSync(bytes) : bytes;
     const filter = compressed ? ' /Filter /FlateDecode' : '';
     return `<< /Length ${payload.length} ${entries}${filter} >>\nstream\n${payload.toString('latin1')}\nendstream`;
-}
-
-function appendRevision(base, entries) {
-    let pdf = Buffer.from(base).toString('latin1');
-    const footer = /\nstartxref\n(\d+)\n%%EOF\n$/.exec(pdf);
-    assert.ok(footer, 'Base fixture must contain a classic xref footer.');
-    const previous = Number(footer[1]);
-    const fileId = /\/ID \[<[^>]+> <[^>]+>\]/.exec(pdf.slice(previous))?.[0];
-    assert.ok(fileId, 'Base fixture must contain a file ID.');
-    const rows = [];
-    for (const [number, body] of [...entries].sort(([a], [b]) => a - b)) {
-        rows.push(`${number} 1\n${String(pdf.length).padStart(10, '0')} 00000 n \n`);
-        pdf += `${number} 0 obj\n${body}\nendobj\n`;
-    }
-    const offset = pdf.length;
-    const size = Math.max(...entries.keys(), 7) + 1;
-    return Buffer.from(pdf + `xref\n${rows.join('')}trailer\n<< /Size ${size} /Root 1 0 R ${fileId} /Prev ${previous} >>\nstartxref\n${offset}\n%%EOF\n`, 'latin1');
 }
 
 function addCidFont(entries, { mappedGlyph, compressed }) {
@@ -97,7 +80,8 @@ export function makePdfaFontFixture(xml, {
 } = {}) {
     const glyph = font === 'cid' ? `<${cid.toString(16).padStart(4, '0')}>` : '(A)';
     const text = content ?? `BT /F1 12 Tf ${mode ? mode + ' Tr ' : ''}20 100 Td ${glyph} Tj ET`;
-    const resources = `<< /Font << /F1 ${missingResource ? 99 : 9} 0 R >> >>`;
+    const gray = '/ColorSpace << /DefaultGray [/CalGray << /WhitePoint [0.95047 1 1.08883] >>] >>';
+    const resources = `<< /Font << /F1 ${missingResource ? 99 : 9} 0 R >> ${gray} >>`;
     let pageResources = '/Resources ' + resources;
     const entries = new Map();
     if (placement === 'inherited') {
@@ -108,7 +92,7 @@ export function makePdfaFontFixture(xml, {
         // Different fonts share the resource key F1 in two separate scopes.
         entries.set(14, stream(text, '/Type /XObject /Subtype /Form /BBox [0 0 200 200] /Resources ' + resources, compressed));
         entries.set(16, standardFont);
-        pageResources = '/Resources << /Font << /F1 16 0 R >> /XObject << /Fm 14 0 R >> >>';
+        pageResources = '/Resources << /Font << /F1 16 0 R >> /XObject << /Fm 14 0 R >> ' + gray + ' >>';
     }
     entries.set(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 8 0 R ' + pageResources + ' >>');
     const pageContents = placement === 'form' ? 'q /Fm Do Q' : placement === 'unusedForm' ? 'q Q' : text;
@@ -124,7 +108,7 @@ export function makePdfaFontFixture(xml, {
     } else {
         entries.set(9, standardFont);
     }
-    return appendRevision(makePdf(xml), entries);
+    return appendPdfRevision(makePdf(xml), entries);
 }
 
 export function makePdfaFontCases(xml) {
