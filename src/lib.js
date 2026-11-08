@@ -1,36 +1,9 @@
 window.PDFAttachmentExtractor = class PDFAttachmentExtractor {
-    async extractXML(file) {
-        const arrayBuffer = await file.arrayBuffer();
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer, isEvalSupported: false });
-        const pdfDoc = await loadingTask.promise;
-        try {
-        const attachments = await pdfDoc.getAttachments();
-        if (!attachments || Object.keys(attachments).length === 0) {
-            throw new Error("Keine Anhange in dieser PDF gefunden. Ist es ein ZUGFeRD/PDF-A3 Dokument?");
-        }
-
-        const candidates = [];
-        for (const [key, att] of Object.entries(attachments)) {
-            const filename = att.filename || att.name || key;
-            if (!filename.toLowerCase().endsWith('.xml')) continue;
-            const payload = att.content || att.data || att.bytes;
-            const bytes = typeof payload === 'string' ? new TextEncoder().encode(payload) : new Uint8Array(payload);
-            if (bytes.length > 20 * 1024 * 1024) throw new Error('XML-Anhang überschreitet 20 MB.');
-            const content = window.InvoiceValidation.decode(bytes);
-            const recognizedName = /^(factur-x|zugferd-invoice|xrechnung)\.xml$/i.test(filename);
-            try {
-                const doc = window.InvoiceValidation.parse(content);
-                if (recognizedName || doc.documentElement.localName === 'CrossIndustryInvoice') candidates.push({ filename, content, bytes });
-            } catch (error) {
-                if (recognizedName) throw error;
-            }
-        }
-        if (!candidates.length) {
-            throw new Error("Kein XML-Anhang gefunden. Dies scheint keine gueltige E-Rechnung zu sein.");
-        }
-        if (candidates.length > 1) throw new Error('Mehrere mögliche Rechnungs-XML-Anhänge gefunden. Keine eindeutige Datenquelle; Prüfung abgebrochen.');
-        return candidates[0];
-        } finally { await pdfDoc.destroy(); }
+    async extractXML(fileOrBytes) {
+        const bytes = fileOrBytes instanceof Uint8Array ? fileOrBytes : new Uint8Array(await fileOrBytes.arrayBuffer());
+        const { extractInvoice } = await import('./pdf-validation.mjs');
+        const V = window.InvoiceValidation;
+        return extractInvoice(bytes, { parseXml: V.parse, decodeXml: V.decode, profileOf: V.profile });
     }
 };
 

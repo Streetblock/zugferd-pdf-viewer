@@ -19,6 +19,8 @@ Prüfkern und die Regelpakete sind auf beiden Branches identisch.
 
 ## Starten
 
+Dieser Integrationsbranch benötigt Node >=22.22.3 (getestet mit 24.14).
+
 ```powershell
 npm ci
 npm start
@@ -79,9 +81,10 @@ Ergebniszeile öffnet alle Prüfdetails, Fehler, Hinweise und Prüfsummen. Bei j
 neuen Dateiauswahl ist der Bereich wieder geschlossen, auch bei Regelfehlern.
 
 Die vorhandene PDF-Extraktion liefert die ursprünglichen XML-Bytes an denselben
-Prüfkern. Mehrere mögliche Rechnungsanhänge führen zum Abbruch. Eine PDF mit
-gültigem XML zeigt **„XML bestanden · PDF/A-Prüfung offen“**. Die vollständige
-Java-freie PDF/A-3- und Einbettungsprüfung ist noch nicht implementiert.
+Prüfkern. Mehrere mögliche Rechnungsanhänge führen zum Abbruch. Eine PDF mit gültigem XML und bestandenen PDF-Basisprüfungen zeigt
+**„XML und PDF-Basisprüfungen bestanden · PDF/A offen“**. Bei widersprüchlicher
+Einbettung oder widersprüchlichen Metadaten bleibt der Fehler auch bei gültigem
+XML sichtbar. Die vollständige PDF/A-3-Prüfung ist noch nicht implementiert.
 PDF-Bild und XML werden nicht inhaltlich abgeglichen. Echtheit von Kennungen,
 steuerliche Sachverhalte und Archivprozesse werden nicht bestätigt. Downloads
 und SHA-256 sind kein revisionssicheres Archiv.
@@ -247,3 +250,64 @@ gelten auch bei einer späteren eigenständigen Bibliotheksauslieferung.
 Als Nächstes: UBL Invoice/CreditNote, XRechnung Extension/CVD, Worker-Ausführung und
 eine Java-freie PDF/A-Engine mit nachgewiesenem Prüfumfang. Metadaten allein
 dürfen keine PDF/A-Konformität bestätigen.
+
+## Lokaler PDF.js-Fork: experimentelle PDF-Basisprüfungen
+
+Branch: `feat/local-pdf-inspection`. Der PDF.js-CDN-Verweis wurde durch einen
+mitgelieferten API-/Worker-Build unter `vendor/pdfjs/` ersetzt. Herkunft, Fork-
+Commit, SHA-256-Dateihashes und Buildvariante stehen in `manifest.json`;
+Apache-Lizenz und Änderungshinweis liegen daneben. Ein gemeinsamer Legacy-Build
+wird für Browser und Node verwendet. Keine neue npm-Abhängigkeit wurde ergänzt.
+Tailwind und die Google-Icon-Schrift werden weiterhin extern geladen; der
+PDF-/XML-Prüfpfad benötigt sie nicht. Browser-Tests blockieren externe Anfragen.
+
+Die drei getrennten Prüfzeilen bedeuten:
+
+- **XML-Einbettung (Basisprüfungen):** eindeutige Rechnungsquelle, F-/UF-Verweise,
+  Streamtyp, XML-MIME-Type und Dokument-AF. Exakte XML-Bytes und Original-PDF
+  werden gehasht. Unterschiedliche XML-Streams oder mehrere Rechnungen führen
+  zum Abbruch. Source/Data-Beziehungen und Parser-Reparaturen bleiben offen.
+- **Metadaten (Basisprüfungen):** wohlgeformtes XMP ohne DTD/Entitäten, PDF/A-3-
+  Kennung sowie Dateiname/Profil im Abgleich mit dem tatsächlichen XML. Erkannt
+  werden Factur-X-1.0- und ZUGFeRD-2-Namensräume; unbekannte Formatversionen,
+  XRechnung-XMP und andere Varianten bleiben offen. Die genaue ZUGFeRD-
+  Unterversion lässt sich daraus nicht zuverlässig bestimmen.
+- **PDF/A-3-Konformität (Vollprüfung):** bleibt immer offen. Schriften, Farbräume,
+  verbotene Funktionen, XMP-Erweiterungsschemata und sämtliche Anforderungen der
+  Konformitätsstufe sind damit nicht vollständig geprüft. Auch die vollständigen
+  versionsabhängigen Einbettungsregeln und Parser-Reparaturen sind nicht abgedeckt.
+
+Ein grünes **Basis**-Ergebnis ist bewusst nur eine Aussage zu diesem Teilumfang.
+Es bestätigt keine vollständige Factur-X-, ZUGFeRD- oder PDF/A-Konformität.
+Der JSON-Bericht enthält PDF-Befunde, Einschränkungen, Struktur und Byte-Hashes,
+aber keine zweite Kopie der XML-/Anhangsbytes. Original-XML bleibt unverändert
+herunterladbar. Der normale Betrieb nutzt weiterhin keinen Java-Server.
+
+### PDF.js aktualisieren
+
+Im separaten Fork alle Änderungen committen und anschließend bauen:
+
+```powershell
+npm ci
+npx gulp generic-legacy
+```
+
+Im Viewer:
+
+```powershell
+npm run vendor:pdfjs -- "PFAD_ZUM_PDFJS_FORK"
+npm test
+npm run test:pdf-browser -- "PFAD_ZUM_PDFJS_FORK" "PFAD_ZU_CHROME.EXE"
+```
+
+Der Import verlangt einen sauberen Fork und prüft, dass der Build zum Commit
+passt. Die Browserprüfung verwendet Puppeteer aus dem vorhandenen Fork und
+prüft echte Uploads, Worker, XML-Regeln und Berichtdownloads. Synthetische
+Test-PDFs sind ausdrücklich keine vollständig konformen PDF/A-Beispiele.
+
+`src/pdf-validation.mjs` trennt PDF-Inspektion und Berichtbildung von der UI.
+Die Funktion `extractInvoice(bytes, { parseXml, decodeXml, profileOf })` kann auch
+in Node genutzt werden; die drei Funktionen sind ein strikter XML-Parseradapter
+(wie `InvoiceValidation` im Browser). Node-Tests nutzen den bereits vorhandenen
+jsdom-Parser. PDF.js kann in Node fehlende optionale Canvas-Polyfills melden;
+für den getesteten lesenden Prüfpfad werden diese nicht benötigt.
