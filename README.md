@@ -32,8 +32,9 @@ HTTPS bereitstellen. `file://` wird für die Prüfung nicht unterstützt.
 
 Die Dateiauswahl liest Rechnungen lokal. Der normale Server liefert nur Dateien;
 `/api/validate` ist deaktiviert. Die XML-Engine lädt ausschließlich mitgelieferte
-Regeln und Codelisten. PDF.js, Styling und optionale QR-Bibliotheken stammen noch
-von externen Quellen; die gesamte Anwendung ist daher noch nicht offline gebündelt.
+Regeln und Codelisten. PDF.js und sein Worker werden lokal mitgeliefert.
+Styling, Icons und optionale QR-Bibliotheken stammen weiterhin von externen
+Quellen.
 
 ## Prüfumfang und Grenzen
 
@@ -298,12 +299,16 @@ Im Viewer:
 npm run vendor:pdfjs -- "PFAD_ZUM_PDFJS_FORK"
 npm test
 npm run test:pdf-browser -- "PFAD_ZUM_PDFJS_FORK" "PFAD_ZU_CHROME.EXE"
+npm run test:pdf-browser -- "PFAD_ZUM_PDFJS_FORK" "PFAD_ZU_CHROME.EXE" --online-qr
 ```
 
 Der Import verlangt einen sauberen Fork und prüft, dass der Build zum Commit
 passt. Die Browserprüfung verwendet Puppeteer aus dem vorhandenen Fork und
-prüft echte Uploads, Worker, XML-Regeln und Berichtdownloads. Synthetische
-Test-PDFs sind ausdrücklich keine vollständig konformen PDF/A-Beispiele.
+prüft echte Uploads, Worker, XML-Regeln und Berichtdownloads. Dieselbe PDF
+prüft auch die Zahlungsdaten. Standardmäßig wird der EPC-Payload ohne externe
+Bibliotheken geprüft. Mit `--online-qr` rendert der Test den GiroCode mit den
+gehosteten Bibliotheken. Synthetische Test-PDFs sind ausdrücklich keine
+vollständig konformen PDF/A-Beispiele.
 
 `src/pdf-validation.mjs` trennt PDF-Inspektion und Berichtbildung von der UI.
 Die Funktion `extractInvoice(bytes, { parseXml, decodeXml, profileOf })` kann auch
