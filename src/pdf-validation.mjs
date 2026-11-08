@@ -64,7 +64,7 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
     const selected = candidates[0];
     const { file, filename, doc } = selected;
     const report = { engine: `Streetblock PDF.js ${pdfjs.version} (${pdfjs.build})`, sourceSha256, xmlSha256: selected.xmlSha256,
-        checkedAt: new Date().toISOString(), scope: 'PDF-Einbettung, XMP und PDF/A-Dateistruktur: Basisprüfungen', status: 'partial',
+        checkedAt: new Date().toISOString(), scope: 'Basisprüfungen für PDF-Einbettung, XMP und PDF/A-Datei- und Objektregeln', status: 'partial',
         parser: evidence.parser, limits: evidence.limits, checks: [], issues: [], metadata: {}, files: [],
         limitations: ['Keine vollständige PDF/A-3-Prüfung.', 'Keine vollständigen versionsabhängigen Einbettungsregeln.',
             'Parser-Reparaturen werden noch nicht vollständig erfasst.', 'Keine Prüfung der XMP-Erweiterungsschemata oder der PDF-Bild/XML-Übereinstimmung.'] };
@@ -138,18 +138,18 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
         if (rule.status === 'fail') add('pdf', rule.id, rule.detail, 'error', rule.location);
     }
     const applicableRules = pdfA.rules.filter(rule => rule.status !== 'not-applicable');
-    const passedFileRules = applicableRules.filter(rule => rule.status === 'pass').length;
-    const failedFileRules = applicableRules.filter(rule => rule.status === 'fail').length;
-    const fileDetail = failedFileRules
-        ? `${failedFileRules} ${failedFileRules === 1 ? 'Datei- oder Strukturregel' : 'Datei- oder Strukturregeln'} verletzt. Regelkennungen und Fundstellen stehen unter „Fehler und Warnungen“.`
-        : `${passedFileRules} von ${applicableRules.length} anwendbaren Datei- und Strukturregeln bestanden. Die Vollprüfung bleibt offen.`;
+    const passedRules = applicableRules.filter(rule => rule.status === 'pass').length;
+    const failedRules = applicableRules.filter(rule => rule.status === 'fail').length;
+    const pdfADetail = failedRules
+        ? `${failedRules} ${failedRules === 1 ? 'Prüfregel' : 'Prüfregeln'} verletzt. Regelkennungen und Fundstellen stehen unter „Fehler und Warnungen“.`
+        : `${passedRules} von ${applicableRules.length} anwendbaren Prüfregeln bestanden. Die Vollprüfung bleibt offen.`;
     const status = stage => report.issues.some(i => i.stage === stage && i.severity === 'error') ? 'fail'
         : report.issues.some(i => i.stage === stage && i.severity === 'warning') ? 'unknown' : 'pass';
     report.checks = [
         check('embedding', status('embedding'), 'XML-Einbettung (Basisprüfungen)', `Datei: ${filename}; Beziehung: ${file.relationship?.value || 'fehlt'}. Dateiverweise, Dokumentzuordnung, MIME-Type und exakte XML-Bytes untersucht. Vollständige versionsabhängige Formatregeln bleiben offen.`),
         check('metadata', status('metadata'), 'Metadaten (Basisprüfungen)', `PDF/A-Kennung: ${report.metadata.part || '?'}${report.metadata.conformance || '?'}; Profil: ${report.metadata.ConformanceLevel || '?'}. Kennungen und XML-Abgleich sind kein PDF/A-Konformitätsnachweis.`),
         check('pdf', pdfA.status === 'invalid' ? 'fail' : 'unknown',
-            pdfAProfile ? `PDF/A-${pdfAProfile}-Konformität` : 'PDF/A-3-Konformität', fileDetail)
+            pdfAProfile ? `PDF/A-${pdfAProfile}-Konformität` : 'PDF/A-3-Konformität', pdfADetail)
     ];
     if (report.issues.some(i => i.severity === 'error')) report.status = 'invalid';
     return { filename, content: selected.content, bytes: selected.bytes, pdfReport: report };

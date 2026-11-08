@@ -272,9 +272,16 @@ Die drei getrennten Prüfzeilen bedeuten:
   Objekte und die Verweise zwischen Revisionen. Diese Befunde tragen eigene
   PDF-XREF- bzw. PDF-OBJECT-STREAM-Kennungen und nennen die einschlägigen
   Abschnitte von [ISO 32000-1](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf).
-  Ein eindeutiger Verstoß ergibt einen Fehler.
-  Die Vollprüfung bleibt ohne Verstoß offen. Dazu fehlen u. a. Schrift-,
-  Farbraum-, Inhalts- und XMP-Erweiterungsprüfungen.
+  Für Dokumentobjekte prüft der Worker den Katalog, die Kind- und
+  Elternverweise und die Seitenanzahl im Seitenbaum. Bei Anmerkungen prüft er
+  Typ, Flags und ausgewählte Anforderungen an die Darstellung. Bei Aktionen
+  prüft er die erlaubten Typen und Namen sowie die Verbote für zusätzliche
+  Aktionen im Katalog, auf Seiten und in Formularen. Die PDF/A-Regeln dazu
+  stehen in den Abschnitten 6.3, 6.4 und 6.5 der
+  [veraPDF-Regelreferenz](https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-631-1).
+  Ein eindeutiger Verstoß ergibt einen Fehler. Die Vollprüfung bleibt ohne
+  Verstoß offen. Dazu fehlen u. a. Schrift-, Farbraum-, Inhalts- und
+  XMP-Erweiterungsprüfungen.
 
 Ein grünes **Basis**-Ergebnis ist bewusst nur eine Aussage zu diesem Teilumfang.
 Es bestätigt keine vollständige Factur-X-, ZUGFeRD- oder PDF/A-Konformität.
@@ -306,6 +313,14 @@ vollständige Syntax der eingebetteten Objekte und die Freiliste sind noch offen
 Der JSON-Bericht führt die erfassten Revisionen, Tabellen, Streams und Einträge
 unter structureCounts auf.
 
+Die Objektprüfung folgt den erreichbaren Einträgen für Katalog und Seiten,
+Anmerkungen, Lesezeichen, Formularfelder, benannte JavaScript-Aktionen und
+Aktionsketten. Dabei wird keine Aktion ausgeführt. Bei beschädigten Verweisen,
+überschrittenen Traversierungsgrenzen oder nicht auswertbaren Aktionspfaden
+können betroffene Regeln offen bleiben. Inhalt und Zustände von
+Darstellungsstreams sind noch offen. Der Bericht zählt die erfassten
+Dokumentobjekte unter documentCounts.
+
 ### PDF.js aktualisieren
 
 Im separaten Fork alle Änderungen committen und anschließend bauen:
@@ -329,8 +344,8 @@ prüft echte Uploads, Worker, XML-Regeln und Berichtdownloads. Synthetische
 Test-PDFs sind ausdrücklich keine vollständig konformen PDF/A-Beispiele.
 Ein unverändertes PDF/A-3b-Beispiel, gezielt veränderte Fassungen und synthetische
 Strukturfälle prüfen identische Befunde in Browser und Node. Dazu gehören
-klassische Tabellen, XRef- und Objektstreams sowie inkrementelle und hybride
-Querverweise.
+klassische Tabellen, XRef- und Objektstreams, inkrementelle und hybride
+Querverweise sowie gezielte Defekte in Seitenbaum, Anmerkungen und Aktionen.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)
@@ -345,6 +360,10 @@ mit dem Verhalten der Referenzversion nicht vollständig überein.
 Bei den neuen Fällen bestätigt veraPDF 1.30.2 insbesondere 6.1.4-2. Ein kaputter
 Objektoffset oder Revisionszeiger kann dort schon beim Laden zum Abbruch führen.
 Einige abweichende Tabelleneinträge behandelt die Referenz als Parserwarnung.
+Bei Anmerkungen und Aktionen bestätigt veraPDF 1.30.2 die Befunde unter anderem
+für versteckte Flags, zusätzliche Aktionen und verbotene Aktionen in Ketten.
+Der lokale Prüfer findet zusätzlich JavaScript-Aktionen im Namensbaum. Die
+Referenzversion meldete bei diesem Testfall keinen Verstoß.
 
 `src/pdf-validation.mjs` trennt PDF-Inspektion und Berichtbildung von der UI.
 Die Funktion `extractInvoice(bytes, { parseXml, decodeXml, profileOf })` kann auch

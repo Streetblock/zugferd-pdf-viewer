@@ -9,6 +9,7 @@ import { createServer } from '../server.mjs';
 import { makePdf, xmpFor } from '../tests/pdf-fixtures.mjs';
 import { pdfaCases } from '../tests/pdfa-cases.mjs';
 import { makePdfaStructureCases } from '../tests/pdfa-structure-cases.mjs';
+import { makePdfaDocumentCases, makePdfaDocumentFixture } from '../tests/pdfa-document-cases.mjs';
 import { sha256, validatePdfA } from '../src/pdfa-validation.mjs';
 const fork = process.argv[2];
 const executablePath = process.argv[3] || process.env.PDFJS_TEST_BROWSER;
@@ -28,6 +29,9 @@ const cases = [
     ['source.pdf', makePdf(xml, { relationship: 'Source' }), 'unknown', 'unknown', 'pass'],
     ['trailing-data.pdf', Buffer.concat([makePdf(xml), Buffer.from('trailing data')]), 'fail', 'pass', 'pass', '6.1.3-3'],
     ['bad-xref-eol.pdf', invalidXrefEol, 'fail', 'pass', 'pass', '6.1.4-2'],
+    ['document-objects.pdf', makePdfaDocumentFixture(xml), 'unknown', 'pass', 'pass'],
+    ['forbidden-action.pdf', makePdfaDocumentFixture(xml, { action: '<< /S /Launch /F (x.exe) >>' }),
+        'fail', 'pass', 'pass', '6.5.1-1'],
     ['invoice.xml', new TextEncoder().encode(xml), 'pass', null, null],
 ];
 const server = createServer();
@@ -71,6 +75,12 @@ try {
             if (pdfaFailure) assert.ok(failures.includes(pdfaFailure), name);
             else assert.deepEqual(failures, [], name);
             if (name === 'incremental.pdf') assert.equal(report.pdfValidation.pdfA.structureCounts.revisions, 2);
+            if (name === 'document-objects.pdf') {
+                assert.equal(report.pdfValidation.pdfA.documentCounts.pages, 2);
+                for (const id of ['PDF-CATALOG', 'PDF-PAGE-TREE', '6.3.1-1', '6.5.1-1']) {
+                    assert.equal(report.pdfValidation.pdfA.rules.find(rule => rule.id === id).status, 'pass', id);
+                }
+            }
         } else assert.equal(report.pdfValidation, undefined);
         await writeFile(new URL(name + '.json', artifactDir), JSON.stringify(report, null, 2));
         console.log('PASS browser upload/report: ' + name);
@@ -83,6 +93,7 @@ try {
     const standaloneCases = [
         ...pdfaCases.map(([name, bytes]) => ({ name, bytes })),
         ...makePdfaStructureCases(xml),
+        ...makePdfaDocumentCases(xml),
     ];
     for (const { name, bytes } of standaloneCases) {
         const inBrowser = await page.evaluate(async input => {

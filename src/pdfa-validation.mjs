@@ -2,7 +2,7 @@ const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const textDecoder = new TextDecoder('latin1');
 const PDF_A_SPEC = 'ISO 19005-3:2012';
 const PDF_SPEC = 'ISO 32000-1:2008';
-const structureRules = [
+const xrefRules = [
     { id: '6.1.4-2', specification: PDF_A_SPEC, clause: '6.1.4',
         label: 'Zeilenumbruch nach dem xref-Schlüsselwort' },
     { id: 'PDF-XREF-TARGET', specification: PDF_SPEC, clause: '7.5.5',
@@ -17,6 +17,22 @@ const structureRules = [
         label: 'Verkettung der Revisionen und Zuordnung hybrider Querverweise' },
     { id: 'PDF-OBJECT-STREAM', specification: PDF_SPEC, clause: '7.5.7, 7.5.8',
         label: 'Kopf und Zuordnung komprimierter Objekte in Objektstreams' },
+];
+const documentRules = [
+    { id: 'PDF-CATALOG', specification: PDF_SPEC, clause: '7.7.2', label: 'Dokumentkatalog und Verweis auf den Seitenbaum' },
+    { id: 'PDF-PAGE-TREE', specification: PDF_SPEC, clause: '7.7.3', label: 'Seitenbaum mit Kind- und Elternverweisen sowie Seitenanzahl' },
+    { id: 'PDF-ANNOTATION', specification: PDF_SPEC, clause: '12.5.2', label: 'Anmerkungsverweise und Anmerkungsdictionaries' },
+    { id: '6.3.1-1', clause: '6.3.1', label: 'Zulässige Anmerkungstypen' },
+    { id: '6.3.2-1', clause: '6.3.2', label: 'Erforderliche Flags an Anmerkungen' },
+    { id: '6.3.2-2', clause: '6.3.2', label: 'Druckbarkeit und Sichtbarkeit der Anmerkungen' },
+    { id: '6.3.3-1', clause: '6.3.3', label: 'Erforderliche Darstellung von Anmerkungen (/AP)' },
+    { id: '6.3.3-2', clause: '6.3.3', label: 'Nur normale Darstellung im /AP-Dictionary' },
+    { id: '6.4.1-1', clause: '6.4.1', label: 'Keine /A- oder /AA-Einträge in Widget-Anmerkungen' },
+    { id: '6.4.1-2', clause: '6.4.1', label: 'Keine /A- oder /AA-Einträge in Formularfeldern' },
+    { id: '6.5.1-1', clause: '6.5.1', label: 'Zulässige Aktionstypen' },
+    { id: '6.5.1-2', clause: '6.5.1', label: 'Zulässige Namen für Navigationsaktionen' },
+    { id: '6.5.2-1', clause: '6.5.2', label: 'Keine zusätzlichen Aktionen im Dokumentkatalog (/AA)' },
+    { id: '6.5.2-2', clause: '6.5.2', label: 'Keine zusätzlichen Aktionen auf Seiten (/AA)' },
 ];
 let runtimePromise;
 
@@ -122,9 +138,9 @@ function inspectEncryption(hasEncrypt) {
             : 'Im letzten Trailer ist /Encrypt nicht vorhanden.');
 }
 
-function inspectStructure(xref) {
-    const checks = new Map(xref?.checks?.map(check => [check.id, check]));
-    return structureRules.map(({ id, specification, clause, label }) => {
+function inspectChecks(definitions, inspection, defaultLocation) {
+    const checks = new Map(inspection?.checks?.map(check => [check.id, check]));
+    return definitions.map(({ id, specification = PDF_A_SPEC, clause, label }) => {
         const evidence = checks.get(id);
         const status = evidence?.status ?? 'unknown';
         const suffix = {
@@ -134,7 +150,7 @@ function inspectStructure(xref) {
             'not-applicable': 'nicht anwendbar',
         }[status];
         return {
-            ...rule(id, status, evidence?.location || 'Querverweise', `${label} – ${suffix}.`),
+            ...rule(id, status, evidence?.location || defaultLocation, `${label} – ${suffix}.`),
             specification,
             clause,
             ...(evidence?.detail ? { evidence: evidence.detail } : {}),
@@ -143,13 +159,14 @@ function inspectStructure(xref) {
 }
 
 function buildReport(profile, fileRules, inspection, passwordRequired = false) {
-    const { trailer, xref } = inspection?.version === 1 ? inspection : {};
+    const { trailer, xref, document: documentInspection } = inspection?.version === 1 ? inspection : {};
     const rules = [
         ...fileRules.slice(0, 2),
         inspectTrailerId(trailer?.id),
         inspectEncryption(passwordRequired ? true : trailer?.hasEncrypt),
         fileRules[2],
-        ...inspectStructure(xref),
+        ...inspectChecks(xrefRules, xref, 'Querverweise'),
+        ...inspectChecks(documentRules, documentInspection, 'Dokumentstruktur'),
     ];
     return {
         specification: PDF_A_SPEC,
@@ -158,6 +175,7 @@ function buildReport(profile, fileRules, inspection, passwordRequired = false) {
         status: rules.some(result => result.status === 'fail') ? 'invalid' : 'partial',
         rules,
         ...(xref?.counts ? { structureCounts: xref.counts } : {}),
+        ...(documentInspection?.counts ? { documentCounts: documentInspection.counts } : {}),
     };
 }
 

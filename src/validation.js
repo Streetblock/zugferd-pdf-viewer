@@ -170,7 +170,7 @@ window.InvoiceValidation = (() => {
     function summary(result) {
         if (result.checks.find(c => c.id === 'xml')?.status === 'fail') return { label: `XML-Prüfung: Regelfehler · Profil ${result.profile}`, status: 'fail' };
         const pdfA = result.pdfValidation?.pdfA;
-        if (pdfA?.status === 'invalid') return { label: 'PDF/A-3-Prüfung: Dateistruktur fehlerhaft', status: 'fail' };
+        if (pdfA?.status === 'invalid') return { label: 'PDF/A-3-Regelverstoß', status: 'fail' };
         if (result.checks.some(c => c.status === 'fail')) return { label: 'Prüfung: Anforderungen nicht erfüllt', status: 'fail' };
         if (result.xmlValidation?.status === 'unsupported') return { label: `XML-Profil ${result.profile}: noch nicht unterstützt`, status: 'unknown' };
         if (result.checks.some(c => c.status === 'unknown')) return { label: result.isPdf && result.checks.find(c => c.id === 'xml')?.status === 'pass'
