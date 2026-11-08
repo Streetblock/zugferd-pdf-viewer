@@ -286,6 +286,10 @@ Die drei getrennten Prüfzeilen bedeuten:
   kontrolliert separat die Einbettung des Rechnungs-XML im Dokumentkatalog.
   Für XMP werden Erweiterungsdeklarationen, ihre RDF-Container und
   Pflichtfelder, definierte Eigenschaften und unterstützte Wertetypen geprüft.
+  Die Schriftprüfung folgt Textoperatoren auf Seiten und in erreichbaren
+  Form-XObjects. Sie prüft die Einbettung verwendeter Schriftprogramme,
+  das Vorhandensein verwendeter Glyphen und die Nutzung von .notdef
+  ([Regeln 6.2.11.4.1 und 6.2.11.8](https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-621141-1)).
   Ein eindeutiger Verstoß ergibt einen Fehler. Die Vollprüfung bleibt ohne
   Verstoß offen. Dazu fehlen u. a. vollständige Schrift-, Farbraum- und
   Inhaltsprüfungen.
@@ -341,6 +345,25 @@ Entitäten werden nicht verarbeitet. Unbekannte oder nicht vollständig
 interpretierbare Wertetypen können offen bleiben. Der JSON-Bericht enthält die
 Zähler embeddedFileCounts und xmpCounts, soweit die Daten lesbar waren.
 
+Die Glyphenprüfung arbeitet mit den ursprünglichen Schriftprogrammen. Sie
+unterstützt Type-3-Zeichenprogramme mit nachvollziehbarer Zeichenkodierung
+sowie TrueType in CIDFontType2 mit Identity-H/V und auflösbarer CID-Zuordnung.
+Für weitere Schrifttypen kann die Einbettung geprüft werden, während die
+Glyphenzuordnung offen bleibt. Eine Schrift, die nur in Ressourcen eingetragen
+ist, gilt dadurch noch nicht als benutzt. Für Text im Render-Modus 3 gelten die
+Einbettungs- und Glyphenvorhandenseinsregeln nicht. Die .notdef-Prüfung bleibt
+auch dort anwendbar. Schriften in noch nicht untersuchten Darstellungsstreams
+und Mustern, vollständige Glyphenbreiten-, Unicode- und weitere Fontregeln
+bleiben offen. Der JSON-Bericht enthält fontCounts.
+
+Bei TrueType zählt eine leere Kontur mit gültigem Glyphenindex als vorhandene
+Glyphe, etwa für ein Leerzeichen. Ein belegtes Mapping auf Glyphenindex 0 ist
+hingegen die .notdef-Glyphe nach der
+[OpenType-Spezifikation](https://learn.microsoft.com/typography/opentype/spec/cmap).
+veraPDF 1.30.2 meldete im entsprechenden CID-Testfall keinen .notdef-Verstoß.
+Die Wiederherstellung des Textmodus bei q/Q folgt dem PDF-Grafikzustand. Auch
+hier ließ die Referenzversion einen gezielt erzeugten Einbettungsfehler durch.
+
 ### PDF.js aktualisieren
 
 Im separaten Fork alle Änderungen committen und anschließend bauen:
@@ -369,6 +392,8 @@ Querverweise sowie gezielte Defekte in Seitenbaum, Anmerkungen und Aktionen.
 Die Anhang- und XMP-Fälle enthalten unter anderem PDF/A-Zuordnungen an Seiten,
 einen zusätzlichen Anhang mit fehlerhaftem MIME-Typ und fehlende oder fehlerhafte
 XMP-Erweiterungsdeklarationen bei weiterhin gültigem Rechnungs-XML.
+Schriftfälle unterscheiden verwendete, unbenutzte und unsichtbar verwendete
+Schriften, fehlende Glyphen und belegte .notdef-Zuordnungen.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)

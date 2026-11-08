@@ -1,5 +1,5 @@
 PDF.js: Mozilla Foundation and contributors, Apache-2.0.
 Streetblock modifications (2026): read-only embedded-file and PDF/A structure inspection APIs.
-Source: https://github.com/Streetblock/pdf.js/tree/c3cc6b4f705927195b11e980918b1be28e7763ae
+Source: https://github.com/Streetblock/pdf.js/tree/928a8350af96e4f119760123386ce4cf2a2d8d38
 Build: npm ci; npx gulp generic-legacy
 Source map comments removed; no runtime edits.

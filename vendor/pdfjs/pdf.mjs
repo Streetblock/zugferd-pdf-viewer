@@ -20,8 +20,8 @@
  */
 
 /**
- * pdfjsVersion = 6.4.161
- * pdfjsBuild = c3cc6b4f7
+ * pdfjsVersion = 6.4.162
+ * pdfjsBuild = 928a8350a
  */
 /******/ var __webpack_modules__ = ({
 
@@ -8194,7 +8194,7 @@ class FloatingToolbar {
 }
 
 ;// ./src/shared/internal_evt.js
-const INTERNAL_EVT = "15050bd4-1262-427d-85f1-b495505ce203";
+const INTERNAL_EVT = "dacb1122-98dc-4039-aa69-b3109141ed56";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -21897,7 +21897,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "6.4.161",
+    apiVersion: "6.4.162",
     data,
     password,
     disableAutoFetch,
@@ -23637,8 +23637,8 @@ class InternalRenderTask {
     }
   }
 }
-const api_version = "6.4.161";
-const build = "c3cc6b4f7";
+const api_version = "6.4.162";
+const build = "928a8350a";
 
 ;// ./node_modules/core-js/modules/es.math.sum-precise.js
 es_math_sum_precise_namespaceFn();

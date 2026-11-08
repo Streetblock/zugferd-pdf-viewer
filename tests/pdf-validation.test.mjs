@@ -29,7 +29,7 @@ test('PDF/A file rules detect individual defects without certifying the document
         assert.deepEqual(fileRules.filter(result => result.status === 'fail').map(result => result.id), failedRule ? [failedRule] : [], name);
         if (!failedRule) {
             assert.equal(report.status, 'partial', name);
-            assert.ok(report.rules.filter(result => !result.id.startsWith('6.6.2.3.')).every(completed), name);
+            assert.ok(report.rules.filter(result => !/^6\.(?:6\.2\.3|2\.11)\./.test(result.id)).every(completed), name);
         }
     }
 });

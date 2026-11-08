@@ -44,6 +44,11 @@ const embeddedFileRules = [
     { id: '6.8-3', clause: '6.8', label: 'Beziehung /AFRelationship eingebetteter Dateien' },
     { id: '6.8-4', clause: '6.8', label: 'Zuordnung eingebetteter Dateien zum Dokument oder einem PDF-Objekt' },
 ];
+const fontRules = [
+    { id: '6.2.11.4.1-1', clause: '6.2.11.4.1', label: 'Einbettung verwendeter Schriftprogramme' },
+    { id: '6.2.11.4.1-2', clause: '6.2.11.4.1', label: 'Vorhandensein der verwendeten Glyphen im eingebetteten Schriftprogramm' },
+    { id: '6.2.11.8-1', clause: '6.2.11.8', label: 'Keine Verwendung der Ersatzglyphe .notdef' },
+];
 const xmpRules = [
     { id: '6.6.2.3.1-1', clause: '6.6.2.3.1', label: 'Definition der verwendeten XMP-Eigenschaften' },
     { id: '6.6.2.3.1-2', clause: '6.6.2.3.1', label: 'Wertetypen verwendeter XMP-Eigenschaften' },
@@ -194,7 +199,7 @@ function inspectChecks(definitions, inspection, defaultLocation) {
 }
 
 function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRequired = false }) {
-    const { trailer, xref, document: documentInspection, embeddedFiles } = inspection?.version === 1 ? inspection : {};
+    const { trailer, xref, document: documentInspection, embeddedFiles, fonts } = inspection?.version === 1 ? inspection : {};
     const rules = [
         ...fileRules.slice(0, 2),
         inspectTrailerId(trailer?.id),
@@ -203,6 +208,7 @@ function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRe
         ...inspectChecks(xrefRules, xref, 'Querverweise'),
         ...inspectChecks(documentRules, documentInspection, 'Dokumentstruktur'),
         ...inspectChecks(embeddedFileRules, embeddedFiles, 'Eingebettete Dateien'),
+        ...inspectChecks(fontRules, fonts, 'Schriften und Glyphen'),
         ...inspectChecks(xmpRules, xmpInspection, 'XMP-Metadaten'),
     ];
     return {
@@ -214,6 +220,7 @@ function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRe
         ...(xref?.counts ? { structureCounts: xref.counts } : {}),
         ...(documentInspection?.counts ? { documentCounts: documentInspection.counts } : {}),
         ...(embeddedFiles?.counts ? { embeddedFileCounts: embeddedFiles.counts } : {}),
+        ...(fonts?.counts ? { fontCounts: fonts.counts } : {}),
         ...(xmpInspection?.counts ? { xmpCounts: xmpInspection.counts } : {}),
     };
 }
