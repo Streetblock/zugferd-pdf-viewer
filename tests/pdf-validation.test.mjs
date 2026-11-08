@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { extractInvoice, sha256 } from '../src/pdf-validation.mjs';
+import { validatePdfA } from '../src/pdfa-validation.mjs';
 import { makePdf, xmpFor } from './pdf-fixtures.mjs';
+import { pdfaCases, referencePdf, referenceSha256 } from './pdfa-cases.mjs';
 const dom = new JSDOM('', { runScripts: 'outside-only' });
 dom.window.TextDecoder = TextDecoder;
 dom.window.TextEncoder = TextEncoder;
@@ -12,6 +14,34 @@ const V = dom.window.InvoiceValidation;
 const adapter = { parseXml: V.parse, decodeXml: V.decode, profileOf: V.profile };
 const xml = await readFile(new URL('fixtures/invoice.xml', import.meta.url), 'utf8');
 const status = (data, id) => data.pdfReport.checks.find(c => c.id === id).status;
+
+test('PDF/A file rules detect individual defects without certifying the document', async () => {
+    assert.equal(await sha256(referencePdf), referenceSha256);
+    for (const [name, input, failedRule] of pdfaCases) {
+        const originalHash = await sha256(input);
+        const report = await validatePdfA(input, { profile: '3b' });
+        assert.equal(await sha256(input), originalHash, name);
+        assert.equal(report.sourceSha256, originalHash, name);
+        assert.equal(report.profile, '3b', name);
+        assert.equal(report.status, failedRule ? 'invalid' : 'partial', name);
+        assert.deepEqual(report.rules.filter(result => result.status === 'fail').map(result => result.id), failedRule ? [failedRule] : [], name);
+        if (!failedRule) assert.ok(report.rules.every(result => result.status === 'pass'), name);
+    }
+});
+
+test('EOF allows one logical EOL and unknown trailer evidence stays open', async () => {
+    for (const eol of ['\n', '\r', '\r\n', '\n\n']) {
+        const report = await validatePdfA(Buffer.concat([referencePdf, Buffer.from(eol)]));
+        assert.equal(report.rules.find(result => result.id === '6.1.3-3').status, eol === '\n\n' ? 'fail' : 'pass');
+    }
+    const report = await validatePdfA(makePdf(xml, { recovery: true }));
+    assert.equal(report.status, 'partial');
+    for (const id of ['6.1.3-1', '6.1.3-2', '6.1.3-3']) {
+        assert.equal(report.rules.find(result => result.id === id).status, 'unknown');
+    }
+    const brokenRevision = await validatePdfA(Buffer.concat([referencePdf, Buffer.from('\nstartxref\n0\n%%EOF\n')]));
+    assert.equal(brokenRevision.rules.find(result => result.id === '6.1.3-3').status, 'unknown');
+});
 
 test('Pinned PDF.js assets match the manifest and no PDF.js CDN remains', async () => {
     const manifest = JSON.parse(await readFile(new URL('../vendor/pdfjs/manifest.json', import.meta.url)));
@@ -29,6 +59,8 @@ for (const options of [{}, { compressed: true, objectStream: true }, { increment
         assert.equal(status(data, 'embedding'), 'pass');
         assert.equal(status(data, 'metadata'), 'pass');
         assert.equal(status(data, 'pdf'), 'unknown');
+        assert.equal(data.pdfReport.pdfA.profile, '3b');
+        assert.ok(data.pdfReport.pdfA.rules.every(result => result.status === 'pass'));
         assert.equal(data.pdfReport.status, 'partial');
         assert.ok(!JSON.stringify(data.pdfReport).includes('<rsm:CrossIndustryInvoice'));
     });
@@ -69,6 +101,19 @@ test('Successful basis checks never certify the PDF/A container', async () => {
     V.applyXmlReport(result, { sourceSha256: result.xmlSha256, profileId: result.profileId, status: 'valid', xsd: { status: 'valid' }, schematron: { status: 'valid', fired: 100 }, issues: [] });
     assert.equal(V.summary(result).status, 'unknown');
     assert.match(V.summary(result).label, /PDF-Basisprüfungen bestanden.*PDF\/A offen/);
+});
+
+test('A proven PDF/A file error remains after successful XML validation', async () => {
+    const input = Buffer.concat([makePdf(xml), Buffer.from('trailing data')]);
+    const data = await extractInvoice(input, adapter);
+    const result = { ...V.preflight(xml, { isPdf: true }), sourceSha256: await sha256(input), xmlSha256: await sha256(data.bytes) };
+    V.applyPdfReport(result, data.pdfReport);
+    V.applyXmlReport(result, { sourceSha256: result.xmlSha256, profileId: result.profileId, status: 'valid', xsd: { status: 'valid' }, schematron: { status: 'valid', fired: 100 }, issues: [] });
+    assert.equal(status(data, 'embedding'), 'pass');
+    assert.equal(status(data, 'metadata'), 'pass');
+    assert.equal(status(data, 'pdf'), 'fail');
+    assert.equal(V.summary(result).status, 'fail');
+    assert.ok(result.issues.some(issue => issue.stage === 'pdf' && issue.rule === '6.1.3-3'));
 });
 for (const profile of ['basic', 'extended']) test('XMP profile consistency for ' + profile, async () => {
     const source = await readFile(new URL('fixtures/invoice-' + profile + '.xml', import.meta.url), 'utf8');

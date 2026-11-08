@@ -1,12 +1,8 @@
-// The PDF.js fork collects evidence. These deliberately limited checks do not
-// certify PDF/A or the complete version-specific Factur-X/ZUGFeRD packaging.
-let runtimePromise;
-export function loadPdfRuntime() {
-    return runtimePromise ||= import('../vendor/pdfjs/pdf.mjs').then(pdfjs => {
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdfjs/pdf.worker.mjs', import.meta.url).href;
-        return pdfjs;
-    }).catch(error => { runtimePromise = null; throw error; });
-}
+import { assessPdfAFile, loadPdfRuntime, sha256 } from './pdfa-validation.mjs';
+
+export { loadPdfRuntime, sha256 };
+
+// The PDF.js fork collects evidence for the invoice and PDF/A basis checks.
 const named = (field, value) => field?.type === 'name' && field.value === value;
 const string = field => field?.type === 'string' ? field.value : '';
 const CII = 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100';
@@ -15,10 +11,6 @@ const PDFA = 'http://www.aiim.org/pdfa/ns/id/';
 const FX = 'urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#';
 const ZF = 'urn:zugferd:pdfa:CrossIndustryDocument:invoice:2p0#';
 const check = (id, status, title, detail) => ({ id, status, title, detail });
-export async function sha256(bytes) {
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
-    return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
 function values(doc, ns, name) {
     const found = [];
     for (const description of doc.getElementsByTagNameNS(RDF, 'Description')) {
@@ -39,10 +31,17 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
     if (!parseXml || !decodeXml || !profileOf) throw new Error('XML-Parseradapter für die PDF-Prüfung fehlt.');
     pdfjs ||= await loadPdfRuntime();
     const sourceSha256 = await sha256(bytes);
-    const task = pdfjs.getDocument({ data: bytes.slice(), isEvalSupported: false });
-    let evidence;
-    try { evidence = await (await task.promise).getEmbeddedFileInspection(); }
-    finally { await task.destroy(); }
+    const task = pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false });
+    let evidence, fileInspection;
+    try {
+        const document = await task.promise;
+        evidence = await document.getEmbeddedFileInspection();
+        try {
+            fileInspection = await document.getPdfAFileInspection?.();
+        } catch {
+            // Missing file evidence leaves the affected PDF/A rules open.
+        }
+    } finally { await task.destroy(); }
     if (evidence.version !== 1) throw new Error('Nicht unterstützte PDF-Prüfschnittstelle.');
     const candidates = [];
     for (const file of evidence.files) {
@@ -65,7 +64,7 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
     const selected = candidates[0];
     const { file, filename, doc } = selected;
     const report = { engine: `Streetblock PDF.js ${pdfjs.version} (${pdfjs.build})`, sourceSha256, xmlSha256: selected.xmlSha256,
-        checkedAt: new Date().toISOString(), scope: 'PDF-Einbettung und XMP: Basisprüfungen', status: 'partial',
+        checkedAt: new Date().toISOString(), scope: 'PDF-Einbettung, XMP und PDF/A-Dateistruktur: Basisprüfungen', status: 'partial',
         parser: evidence.parser, limits: evidence.limits, checks: [], issues: [], metadata: {}, files: [],
         limitations: ['Keine vollständige PDF/A-3-Prüfung.', 'Keine vollständigen versionsabhängigen Einbettungsregeln.',
             'Parser-Reparaturen werden noch nicht vollständig erfasst.', 'Keine Prüfung der XMP-Erweiterungsschemata oder der PDF-Bild/XML-Übereinstimmung.'] };
@@ -131,12 +130,25 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
             }
         } catch (error) { add('metadata', 'XMP-PARSE', 'XMP-XML ist nicht sicher lesbar: ' + error.message); }
     }
+    const { part, conformance } = report.metadata;
+    const pdfAProfile = part === '3' && ['A', 'B', 'U'].includes(conformance) ? `3${conformance.toLowerCase()}` : null;
+    const pdfA = assessPdfAFile(bytes, { inspection: fileInspection, profile: pdfAProfile });
+    report.pdfA = pdfA;
+    for (const rule of pdfA.rules) {
+        if (rule.status === 'fail') add('pdf', rule.id, rule.detail, 'error', rule.location);
+    }
+    const passedFileRules = pdfA.rules.filter(rule => rule.status === 'pass').length;
+    const failedFileRules = pdfA.rules.filter(rule => rule.status === 'fail').length;
+    const fileDetail = failedFileRules
+        ? `${failedFileRules} ${failedFileRules === 1 ? 'Dateiregel' : 'Dateiregeln'} verletzt. Regelkennungen und Fundstellen stehen unter „Fehler und Warnungen“.`
+        : `${passedFileRules} von ${pdfA.rules.length} Dateiregeln bestanden. Die Vollprüfung bleibt offen.`;
     const status = stage => report.issues.some(i => i.stage === stage && i.severity === 'error') ? 'fail'
         : report.issues.some(i => i.stage === stage && i.severity === 'warning') ? 'unknown' : 'pass';
     report.checks = [
         check('embedding', status('embedding'), 'XML-Einbettung (Basisprüfungen)', `Datei: ${filename}; Beziehung: ${file.relationship?.value || 'fehlt'}. Dateiverweise, Dokumentzuordnung, MIME-Type und exakte XML-Bytes untersucht. Vollständige versionsabhängige Formatregeln bleiben offen.`),
         check('metadata', status('metadata'), 'Metadaten (Basisprüfungen)', `PDF/A-Kennung: ${report.metadata.part || '?'}${report.metadata.conformance || '?'}; Profil: ${report.metadata.ConformanceLevel || '?'}. Kennungen und XML-Abgleich sind kein PDF/A-Konformitätsnachweis.`),
-        check('pdf', 'unknown', 'PDF/A-3-Konformität (Vollprüfung)', 'Noch nicht implementiert. Unter anderem Schriften, Farbräume, verbotene Funktionen und Anforderungen der Konformitätsstufe sind nicht vollständig geprüft.')
+        check('pdf', pdfA.status === 'invalid' ? 'fail' : 'unknown',
+            pdfAProfile ? `PDF/A-${pdfAProfile}-Konformität` : 'PDF/A-3-Konformität', fileDetail)
     ];
     if (report.issues.some(i => i.severity === 'error')) report.status = 'invalid';
     return { filename, content: selected.content, bytes: selected.bytes, pdfReport: report };

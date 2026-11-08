@@ -20,8 +20,8 @@
  */
 
 /**
- * pdfjsVersion = 6.4.157
- * pdfjsBuild = 5f3437da6
+ * pdfjsVersion = 6.4.158
+ * pdfjsBuild = 1235d7574
  */
 /******/ var __webpack_modules__ = ({
 
@@ -66325,6 +66325,64 @@ class PDFDocument {
   parseStartXRef() {
     this.xref.setStartXRef(this.startXRef);
   }
+  getPdfAFileInspection() {
+    const {
+      recoveryMode,
+      xrefSectionsComplete
+    } = this.xref.inspectionState;
+    const parser = {
+      recoveryMode,
+      xrefSectionsComplete,
+      diagnosticsComplete: false
+    };
+    const trailer = this.xref.trailer;
+    if (recoveryMode || !xrefSectionsComplete || !(trailer instanceof Dict)) {
+      return {
+        version: 1,
+        parser,
+        trailer: null
+      };
+    }
+    const value = trailer.getRaw("ID");
+    let id;
+    if (Array.isArray(value)) {
+      id = {
+        type: "array",
+        length: value.length,
+        entries: value.slice(0, 2).map(entry => {
+          if (typeof entry === "string") {
+            return {
+              type: "string",
+              byteLength: entry.length
+            };
+          }
+          return {
+            type: entry instanceof Ref ? "reference" : "other"
+          };
+        })
+      };
+    } else if (!trailer.has("ID")) {
+      id = {
+        type: "missing"
+      };
+    } else if (value === null) {
+      id = {
+        type: "null"
+      };
+    } else {
+      id = {
+        type: value instanceof Ref ? "reference" : "other"
+      };
+    }
+    return {
+      version: 1,
+      parser,
+      trailer: {
+        id,
+        hasEncrypt: trailer.has("Encrypt")
+      }
+    };
+  }
   get numPages() {
     let num = 0;
     if (this.catalog.hasActualNumPages) {
@@ -71091,7 +71149,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "6.4.157";
+    const workerVersion = "6.4.158";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -71332,6 +71390,9 @@ class WorkerMessageHandler {
     });
     handler.on("GetEmbeddedFileInspection", function () {
       return pdfManager.ensureCatalog("getEmbeddedFileInspection");
+    });
+    handler.on("GetPdfAFileInspection", function () {
+      return pdfManager.ensureDoc("getPdfAFileInspection");
     });
     handler.on("GetAttachments", function () {
       return pdfManager.ensureCatalog("attachments");

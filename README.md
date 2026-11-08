@@ -21,8 +21,8 @@ HTTPS bereitstellen. `file://` wird für die Prüfung nicht unterstützt.
 
 Die Dateiauswahl liest Rechnungen lokal. Der normale Server liefert nur Dateien;
 `/api/validate` ist deaktiviert. Die XML-Engine lädt ausschließlich mitgelieferte
-Regeln und Codelisten. PDF.js, Styling und optionale QR-Bibliotheken stammen noch
-von externen Quellen; die gesamte Anwendung ist daher noch nicht offline gebündelt.
+Regeln und Codelisten. PDF.js und sein Worker werden lokal mitgeliefert.
+Styling, Icons und optionale QR-Bibliotheken stammen von externen Quellen.
 
 ## Prüfumfang und Grenzen
 
@@ -71,9 +71,9 @@ neuen Dateiauswahl ist der Bereich wieder geschlossen, auch bei Regelfehlern.
 
 Die vorhandene PDF-Extraktion liefert die ursprünglichen XML-Bytes an denselben
 Prüfkern. Mehrere mögliche Rechnungsanhänge führen zum Abbruch. Eine PDF mit gültigem XML und bestandenen PDF-Basisprüfungen zeigt
-**„XML und PDF-Basisprüfungen bestanden · PDF/A offen“**. Bei widersprüchlicher
-Einbettung oder widersprüchlichen Metadaten bleibt der Fehler auch bei gültigem
-XML sichtbar. Die vollständige PDF/A-3-Prüfung ist noch nicht implementiert.
+**„XML und PDF-Basisprüfungen bestanden · PDF/A offen“**. Fehler der Einbettung,
+der Metadaten oder der PDF/A-Dateiregeln bleiben auch bei gültigem XML sichtbar.
+Die vollständige PDF/A-3-Prüfung ist noch nicht implementiert.
 PDF-Bild und XML werden nicht inhaltlich abgeglichen. Echtheit von Kennungen,
 steuerliche Sachverhalte und Archivprozesse werden nicht bestätigt. Downloads
 und SHA-256 sind kein revisionssicheres Archiv.
@@ -86,7 +86,7 @@ Isolation und abbrechbare Rechenzeit sind nächste Schritte.
 
 ## JavaScript-API
 
-Node.js 20+:
+XML-Prüfkern in Node:
 
 ```js
 import { readFile } from 'node:fs/promises';
@@ -261,16 +261,34 @@ Die drei getrennten Prüfzeilen bedeuten:
   werden Factur-X-1.0- und ZUGFeRD-2-Namensräume; unbekannte Formatversionen,
   XRechnung-XMP und andere Varianten bleiben offen. Die genaue ZUGFeRD-
   Unterversion lässt sich daraus nicht zuverlässig bestimmen.
-- **PDF/A-3-Konformität (Vollprüfung):** bleibt immer offen. Schriften, Farbräume,
-  verbotene Funktionen, XMP-Erweiterungsschemata und sämtliche Anforderungen der
-  Konformitätsstufe sind damit nicht vollständig geprüft. Auch die vollständigen
-  versionsabhängigen Einbettungsregeln und Parser-Reparaturen sind nicht abgedeckt.
+- **PDF/A-3-Konformität:** Die ersten fünf Dateiregeln prüfen Header an Byte 0,
+  Binärkommentar, Datei-ID, den verbotenen Trailer-Eintrag /Encrypt und zusätzliche
+  Daten nach dem letzten erkennbaren EOF. Der Bericht enthält die Regelnummern
+  6.1.2-1, 6.1.2-2 und 6.1.3-1 bis 6.1.3-3 mit Fundstelle und Status. Ein
+  eindeutiger Verstoß ergibt einen Fehler. Wenn kein Verstoß gefunden wird,
+  bleibt die Vollprüfung offen. Dazu fehlen u. a. Querverweis-, Schrift-,
+  Farbraum-, Inhalts- und XMP-Erweiterungsprüfungen.
 
 Ein grünes **Basis**-Ergebnis ist bewusst nur eine Aussage zu diesem Teilumfang.
 Es bestätigt keine vollständige Factur-X-, ZUGFeRD- oder PDF/A-Konformität.
 Der JSON-Bericht enthält PDF-Befunde, Einschränkungen, Struktur und Byte-Hashes,
 aber keine zweite Kopie der XML-/Anhangsbytes. Original-XML bleibt unverändert
 herunterladbar. Der normale Betrieb nutzt weiterhin keinen Java-Server.
+
+Die Dateiregeln lassen sich in Browser und Node auch ohne Rechnungs-XML ausführen:
+
+~~~js
+import { validatePdfA } from './src/pdfa-validation.mjs';
+const report = await validatePdfA(pdfBytes, { profile: '3b' });
+~~~
+
+Die API akzeptiert bis zu 20 MiB als Uint8Array oder Node Buffer. Der
+Prüfbericht liefert partial oder invalid und die SHA-256-Prüfsumme des Originals.
+Der Viewer übernimmt eine eindeutige PDF/A-3-Stufe aus XMP. Die fünf Dateiregeln
+gelten für 3a, 3b und 3u. Die vollständigen Anforderungen der Stufen sind offen.
+Nach einer Querverweis-Reparatur bleiben die Trailer-Regeln offen. Die ID-Prüfung
+kontrolliert die Struktur aus zwei nichtleeren PDF-Strings. Die Stabilität der ID
+über mehrere Revisionen und indirekte IDs sind noch offen.
 
 ### PDF.js aktualisieren
 
@@ -293,6 +311,19 @@ Der Import verlangt einen sauberen Fork und prüft, dass der Build zum Commit
 passt. Die Browserprüfung verwendet Puppeteer aus dem vorhandenen Fork und
 prüft echte Uploads, Worker, XML-Regeln und Berichtdownloads. Synthetische
 Test-PDFs sind ausdrücklich keine vollständig konformen PDF/A-Beispiele.
+Ein unverändertes PDF/A-3b-Beispiel und gezielt veränderte Fassungen prüfen
+die Dateiregeln mit identischen Befunden in Browser und Node.
+
+Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
+[veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)
+(veraPDF Consortium, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
+SHA-256: 5b8fdee7090f0a0fb7266d10dd0f6f1f8a37d286e3c06b1aa82e01d6d4f0a8a4.
+veraPDF 1.30.2 bestätigte die Originaldatei für Profil 3b. Der Vergleich
+bestätigte außerdem die fünf Einzelbefunde anhand gezielter Defekte. Beim
+Trailer prüft der JavaScript-Kern zusätzlich die beiden ID-Werte als Strings
+und meldet auch einen vorhandenen /Encrypt-Schlüssel mit Nullwert. Bei EOF
+zählt CR, LF oder CRLF jeweils als ein Zeilenumbruch. Diese Grenzfälle stimmen
+mit dem Verhalten der Referenzversion nicht vollständig überein.
 
 `src/pdf-validation.mjs` trennt PDF-Inspektion und Berichtbildung von der UI.
 Die Funktion `extractInvoice(bytes, { parseXml, decodeXml, profileOf })` kann auch

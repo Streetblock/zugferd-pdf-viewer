@@ -2,6 +2,7 @@ import { deflateSync } from 'node:zlib';
 export const xmpFor = (profile = 'EN 16931') => `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" pdfaid:part="3" pdfaid:conformance="B" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#" fx:DocumentType="INVOICE" fx:DocumentFileName="factur-x.xml" fx:Version="1.0" fx:ConformanceLevel="${profile}"/></rdf:RDF></x:xmpmeta>`;
 // Synthetic containers with real invoice XML. They are NOT full PDF/A fixtures.
 export function makePdf(xml, options = {}) {
+    const fileId = '/ID [<00112233445566778899aabbccddeeff> <00112233445566778899aabbccddeeff>]';
     const stream = (data, dict) => {
         data = Buffer.from(data, 'utf8');
         if (options.compressed) { data = deflateSync(data); dict += ' /Filter /FlateDecode'; }
@@ -34,18 +35,18 @@ export function makePdf(xml, options = {}) {
         }
         // Xref streams contain binary bytes, not UTF-8 text.
         const compressed = deflateSync(data);
-        append(11, `<< /Type /XRef /Size 12 /Root 1 0 R /W [1 4 2] /Filter /FlateDecode /Length ${compressed.length} >>\nstream\n${compressed.toString('latin1')}\nendstream`);
+        append(11, `<< /Type /XRef /Size 12 /Root 1 0 R ${fileId} /W [1 4 2] /Filter /FlateDecode /Length ${compressed.length} >>\nstream\n${compressed.toString('latin1')}\nendstream`);
     } else {
         const size = Math.max(...objects.keys()) + 1;
         pdf += `xref\n0 ${size}\n0000000000 65535 f \n`;
         for (let i = 1; i < size; i++) pdf += `${String(offsets.get(i) || 0).padStart(10, '0')} 00000 ${offsets.has(i) ? 'n' : 'f'} \n`;
-        pdf += `trailer\n<< /Size ${size} /Root 1 0 R >>\n`;
+        pdf += `trailer\n<< /Size ${size} /Root 1 0 R ${fileId} >>\n`;
     }
     pdf += `startxref\n${options.recovery ? 1 : xref}\n%%EOF\n`;
     if (options.incremental) {
         append(1, catalog);
         const previous = xref; xref = pdf.length;
-        pdf += `xref\n1 1\n${String(offsets.get(1)).padStart(10, '0')} 00000 n \ntrailer\n<< /Size 8 /Root 1 0 R /Prev ${previous} >>\nstartxref\n${xref}\n%%EOF\n`;
+        pdf += `xref\n1 1\n${String(offsets.get(1)).padStart(10, '0')} 00000 n \ntrailer\n<< /Size 8 /Root 1 0 R ${fileId} /Prev ${previous} >>\nstartxref\n${xref}\n%%EOF\n`;
     }
     return Uint8Array.from(Buffer.from(pdf, 'latin1'));
 }

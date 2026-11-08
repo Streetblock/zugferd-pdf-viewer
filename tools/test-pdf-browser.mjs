@@ -7,7 +7,8 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { createServer } from '../server.mjs';
 import { makePdf, xmpFor } from '../tests/pdf-fixtures.mjs';
-import { sha256 } from '../src/pdf-validation.mjs';
+import { pdfaCases } from '../tests/pdfa-cases.mjs';
+import { sha256, validatePdfA } from '../src/pdfa-validation.mjs';
 const fork = process.argv[2];
 const executablePath = process.argv[3] || process.env.PDFJS_TEST_BROWSER;
 if (!fork || !executablePath) throw new Error('Usage: node tools/test-pdf-browser.mjs PDFJS_CHECKOUT CHROME_EXECUTABLE');
@@ -22,6 +23,7 @@ const cases = [
     ['missing-af.pdf', makePdf(xml, { missingAF: true }), 'fail', 'fail', 'pass'],
     ['wrong-xmp.pdf', makePdf(xml, { xmp: xmpFor('EXTENDED') }), 'fail', 'pass', 'fail'],
     ['source.pdf', makePdf(xml, { relationship: 'Source' }), 'unknown', 'unknown', 'pass'],
+    ['trailing-data.pdf', Buffer.concat([makePdf(xml), Buffer.from('trailing data')]), 'fail', 'pass', 'pass', '6.1.3-3'],
     ['invoice.xml', new TextEncoder().encode(xml), 'pass', null, null],
 ];
 const server = createServer();
@@ -44,7 +46,7 @@ try {
         const original = URL.createObjectURL;
         URL.createObjectURL = blob => { window.testDownload = blob; return original(blob); };
     });
-    for (const [name, bytes, overall, embedding, metadata] of cases) {
+    for (const [name, bytes, overall, embedding, metadata, pdfaFailure] of cases) {
         const file = new URL(name, artifactDir); await writeFile(file, bytes);
         await (await page.$('#file-input')).uploadFile(fileURLToPath(file));
         const hash = await sha256(bytes);
@@ -60,7 +62,9 @@ try {
         if (embedding) {
             assert.equal(report.checks.find(c => c.id === 'embedding').status, embedding, name);
             assert.equal(report.checks.find(c => c.id === 'metadata').status, metadata, name);
-            assert.equal(report.checks.find(c => c.id === 'pdf').status, 'unknown', name);
+            assert.equal(report.checks.find(c => c.id === 'pdf').status, pdfaFailure ? 'fail' : 'unknown', name);
+            assert.deepEqual(report.pdfValidation.pdfA.rules.filter(rule => rule.status === 'fail').map(rule => rule.id),
+                pdfaFailure ? [pdfaFailure] : [], name);
         } else assert.equal(report.pdfValidation, undefined);
         await writeFile(new URL(name + '.json', artifactDir), JSON.stringify(report, null, 2));
         console.log('PASS browser upload/report: ' + name);
@@ -70,6 +74,14 @@ try {
     await (await page.$('#file-input')).uploadFile(fileURLToPath(duplicate));
     await page.waitForFunction(() => document.querySelector('#error-text').textContent.includes('Mehrere'), { timeout: 20000 });
     assert.equal(await page.$eval('#download-report', el => el.disabled), true);
+    for (const [name, bytes] of pdfaCases) {
+        const inBrowser = await page.evaluate(async input => {
+            const { validatePdfA } = await import('/src/pdfa-validation.mjs');
+            return validatePdfA(new Uint8Array(input), { profile: '3b' });
+        }, Array.from(bytes));
+        assert.deepEqual(inBrowser, await validatePdfA(bytes), name);
+    }
+    console.log('PASS Browser and Node agree on the PDF/A corpus fixture and all file-rule mutations.');
     assert.ok(urls.some(r => r.url === base + '/vendor/pdfjs/pdf.worker.mjs'));
     assert.ok(!urls.some(r => /cdnjs.*pdf/.test(r.url)));
     assert.ok(!urls.some(r => r.method === 'POST'));

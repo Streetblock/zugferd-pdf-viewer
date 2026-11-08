@@ -20,8 +20,8 @@
  */
 
 /**
- * pdfjsVersion = 6.4.157
- * pdfjsBuild = 5f3437da6
+ * pdfjsVersion = 6.4.158
+ * pdfjsBuild = 1235d7574
  */
 /******/ var __webpack_modules__ = ({
 
@@ -8194,7 +8194,7 @@ class FloatingToolbar {
 }
 
 ;// ./src/shared/internal_evt.js
-const INTERNAL_EVT = "9bd8afc1-21c9-4d42-86b9-35fe7ce8a792";
+const INTERNAL_EVT = "f08fe271-9306-4a17-b82a-575a6792b8cc";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -21897,7 +21897,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "6.4.157",
+    apiVersion: "6.4.158",
     data,
     password,
     disableAutoFetch,
@@ -22111,6 +22111,9 @@ class PDFDocumentProxy {
   }
   getEmbeddedFileInspection() {
     return this._transport.getEmbeddedFileInspection();
+  }
+  getPdfAFileInspection() {
+    return this._transport.getPdfAFileInspection();
   }
   getAttachmentContent(id) {
     return this._transport.getAttachmentContent(id);
@@ -23365,6 +23368,9 @@ class WorkerTransport {
   getEmbeddedFileInspection() {
     return this.messageHandler.sendWithPromise("GetEmbeddedFileInspection", null);
   }
+  getPdfAFileInspection() {
+    return this.messageHandler.sendWithPromise("GetPdfAFileInspection", null);
+  }
   getAttachmentContent(id) {
     return this.messageHandler.sendWithPromise("GetAttachmentContent", id);
   }
@@ -23627,8 +23633,8 @@ class InternalRenderTask {
     }
   }
 }
-const api_version = "6.4.157";
-const build = "5f3437da6";
+const api_version = "6.4.158";
+const build = "1235d7574";
 
 ;// ./node_modules/core-js/modules/es.math.sum-precise.js
 es_math_sum_precise_namespaceFn();
