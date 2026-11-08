@@ -137,11 +137,12 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
     for (const rule of pdfA.rules) {
         if (rule.status === 'fail') add('pdf', rule.id, rule.detail, 'error', rule.location);
     }
-    const passedFileRules = pdfA.rules.filter(rule => rule.status === 'pass').length;
-    const failedFileRules = pdfA.rules.filter(rule => rule.status === 'fail').length;
+    const applicableRules = pdfA.rules.filter(rule => rule.status !== 'not-applicable');
+    const passedFileRules = applicableRules.filter(rule => rule.status === 'pass').length;
+    const failedFileRules = applicableRules.filter(rule => rule.status === 'fail').length;
     const fileDetail = failedFileRules
-        ? `${failedFileRules} ${failedFileRules === 1 ? 'Dateiregel' : 'Dateiregeln'} verletzt. Regelkennungen und Fundstellen stehen unter „Fehler und Warnungen“.`
-        : `${passedFileRules} von ${pdfA.rules.length} Dateiregeln bestanden. Die Vollprüfung bleibt offen.`;
+        ? `${failedFileRules} ${failedFileRules === 1 ? 'Datei- oder Strukturregel' : 'Datei- oder Strukturregeln'} verletzt. Regelkennungen und Fundstellen stehen unter „Fehler und Warnungen“.`
+        : `${passedFileRules} von ${applicableRules.length} anwendbaren Datei- und Strukturregeln bestanden. Die Vollprüfung bleibt offen.`;
     const status = stage => report.issues.some(i => i.stage === stage && i.severity === 'error') ? 'fail'
         : report.issues.some(i => i.stage === stage && i.severity === 'warning') ? 'unknown' : 'pass';
     report.checks = [

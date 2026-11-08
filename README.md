@@ -261,12 +261,19 @@ Die drei getrennten Prüfzeilen bedeuten:
   werden Factur-X-1.0- und ZUGFeRD-2-Namensräume; unbekannte Formatversionen,
   XRechnung-XMP und andere Varianten bleiben offen. Die genaue ZUGFeRD-
   Unterversion lässt sich daraus nicht zuverlässig bestimmen.
-- **PDF/A-3-Konformität:** Die ersten fünf Dateiregeln prüfen Header an Byte 0,
+- **PDF/A-3-Konformität:** Die Dateiregeln prüfen Header an Byte 0,
   Binärkommentar, Datei-ID, den verbotenen Trailer-Eintrag /Encrypt und zusätzliche
   Daten nach dem letzten erkennbaren EOF. Der Bericht enthält die Regelnummern
-  6.1.2-1, 6.1.2-2 und 6.1.3-1 bis 6.1.3-3 mit Fundstelle und Status. Ein
-  eindeutiger Verstoß ergibt einen Fehler. Wenn kein Verstoß gefunden wird,
-  bleibt die Vollprüfung offen. Dazu fehlen u. a. Querverweis-, Schrift-,
+  6.1.2-1, 6.1.2-2 und 6.1.3-1 bis 6.1.3-3 mit Fundstelle und Status.
+  Hinzu kommt der einzelne Zeilenumbruch nach dem klassischen xref-Schlüsselwort
+  ([6.1.4-2](https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-614-2)).
+  Die Strukturprüfungen untersuchen startxref, Tabelleneinträge,
+  Objekt-Offsets und Generationen, XRef-Streams, die Zuordnung komprimierter
+  Objekte und die Verweise zwischen Revisionen. Diese Befunde tragen eigene
+  PDF-XREF- bzw. PDF-OBJECT-STREAM-Kennungen und nennen die einschlägigen
+  Abschnitte von [ISO 32000-1](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf).
+  Ein eindeutiger Verstoß ergibt einen Fehler.
+  Die Vollprüfung bleibt ohne Verstoß offen. Dazu fehlen u. a. Schrift-,
   Farbraum-, Inhalts- und XMP-Erweiterungsprüfungen.
 
 Ein grünes **Basis**-Ergebnis ist bewusst nur eine Aussage zu diesem Teilumfang.
@@ -284,11 +291,20 @@ const report = await validatePdfA(pdfBytes, { profile: '3b' });
 
 Die API akzeptiert bis zu 20 MiB als Uint8Array oder Node Buffer. Der
 Prüfbericht liefert partial oder invalid und die SHA-256-Prüfsumme des Originals.
-Der Viewer übernimmt eine eindeutige PDF/A-3-Stufe aus XMP. Die fünf Dateiregeln
-gelten für 3a, 3b und 3u. Die vollständigen Anforderungen der Stufen sind offen.
-Nach einer Querverweis-Reparatur bleiben die Trailer-Regeln offen. Die ID-Prüfung
-kontrolliert die Struktur aus zwei nichtleeren PDF-Strings. Die Stabilität der ID
-über mehrere Revisionen und indirekte IDs sind noch offen.
+Der Viewer übernimmt eine eindeutige PDF/A-3-Stufe aus XMP. Die implementierten
+Datei- und Strukturregeln gelten für 3a, 3b und 3u. Die vollständigen Anforderungen
+der Stufen sind offen. Der PDF.js-Worker untersucht die originalen Querverweise
+auch dann, wenn der normale Leser sie für die Darstellung reparieren musste.
+Nach einer Reparatur bleiben die Prüfungen des wirksamen Trailers offen.
+Die ID-Prüfung kontrolliert die Struktur aus zwei nichtleeren PDF-Strings.
+Die Stabilität der ID über mehrere Revisionen und indirekte IDs sind noch offen.
+Bei linearisierten Dateien, überschrittenen Inspektionsgrenzen oder nicht
+unterstützten Streamfiltern bleiben die betreffenden Prüfungen offen. Wenn PDF.js
+die Datei nicht öffnen kann, sind nur die direkt auf Originalbytes ausgeführten
+Dateiregeln verfügbar. Die Objektstream-Prüfung bewertet Kopf und Index. Die
+vollständige Syntax der eingebetteten Objekte und die Freiliste sind noch offen.
+Der JSON-Bericht führt die erfassten Revisionen, Tabellen, Streams und Einträge
+unter structureCounts auf.
 
 ### PDF.js aktualisieren
 
@@ -311,8 +327,10 @@ Der Import verlangt einen sauberen Fork und prüft, dass der Build zum Commit
 passt. Die Browserprüfung verwendet Puppeteer aus dem vorhandenen Fork und
 prüft echte Uploads, Worker, XML-Regeln und Berichtdownloads. Synthetische
 Test-PDFs sind ausdrücklich keine vollständig konformen PDF/A-Beispiele.
-Ein unverändertes PDF/A-3b-Beispiel und gezielt veränderte Fassungen prüfen
-die Dateiregeln mit identischen Befunden in Browser und Node.
+Ein unverändertes PDF/A-3b-Beispiel, gezielt veränderte Fassungen und synthetische
+Strukturfälle prüfen identische Befunde in Browser und Node. Dazu gehören
+klassische Tabellen, XRef- und Objektstreams sowie inkrementelle und hybride
+Querverweise.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)
@@ -324,6 +342,9 @@ Trailer prüft der JavaScript-Kern zusätzlich die beiden ID-Werte als Strings
 und meldet auch einen vorhandenen /Encrypt-Schlüssel mit Nullwert. Bei EOF
 zählt CR, LF oder CRLF jeweils als ein Zeilenumbruch. Diese Grenzfälle stimmen
 mit dem Verhalten der Referenzversion nicht vollständig überein.
+Bei den neuen Fällen bestätigt veraPDF 1.30.2 insbesondere 6.1.4-2. Ein kaputter
+Objektoffset oder Revisionszeiger kann dort schon beim Laden zum Abbruch führen.
+Einige abweichende Tabelleneinträge behandelt die Referenz als Parserwarnung.
 
 `src/pdf-validation.mjs` trennt PDF-Inspektion und Berichtbildung von der UI.
 Die Funktion `extractInvoice(bytes, { parseXml, decodeXml, profileOf })` kann auch

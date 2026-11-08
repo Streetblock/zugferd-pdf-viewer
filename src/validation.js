@@ -66,7 +66,7 @@ window.InvoiceValidation = (() => {
             check('xml', 'unknown', 'XSD und Schematron', 'JavaScript-Prüfung noch nicht abgeschlossen.'),
             ...(isPdf ? [check('embedding', 'unknown', 'XML-Einbettung (Basisprüfungen)', 'Noch nicht abgeschlossen.'),
                 check('metadata', 'unknown', 'Metadaten (Basisprüfungen)', 'Noch nicht abgeschlossen.')] : []),
-            check('pdf', isPdf ? 'unknown' : 'info', 'PDF/A-3-Konformität', isPdf ? 'Dateiregeln noch nicht ausgewertet.' : 'Bei einer reinen XML-Datei nicht anwendbar.'),
+            check('pdf', isPdf ? 'unknown' : 'info', 'PDF/A-3-Konformität', isPdf ? 'Datei- und Strukturregeln noch nicht ausgewertet.' : 'Bei einer reinen XML-Datei nicht anwendbar.'),
             check('authority', 'info', 'XML ist die Datenquelle', 'Alle angezeigten Rechnungswerte stammen aus dem XML. Ein inhaltlicher Abgleich mit dem PDF-Bild erfolgt nicht.'),
             check('archive', 'info', 'Original aufbewahren', 'Originaldatei bzw. ursprüngliches XML unversehrt aufbewahren. Download und SHA-256-Prüfsumme sind kein revisionssicheres Archiv; GoBD-Prozesse werden hier nicht geprüft.')
         ];
@@ -170,11 +170,11 @@ window.InvoiceValidation = (() => {
     function summary(result) {
         if (result.checks.find(c => c.id === 'xml')?.status === 'fail') return { label: `XML-Prüfung: Regelfehler · Profil ${result.profile}`, status: 'fail' };
         const pdfA = result.pdfValidation?.pdfA;
-        if (pdfA?.status === 'invalid') return { label: 'PDF/A-3-Prüfung: Dateiregelfehler', status: 'fail' };
+        if (pdfA?.status === 'invalid') return { label: 'PDF/A-3-Prüfung: Dateistruktur fehlerhaft', status: 'fail' };
         if (result.checks.some(c => c.status === 'fail')) return { label: 'Prüfung: Anforderungen nicht erfüllt', status: 'fail' };
         if (result.xmlValidation?.status === 'unsupported') return { label: `XML-Profil ${result.profile}: noch nicht unterstützt`, status: 'unknown' };
         if (result.checks.some(c => c.status === 'unknown')) return { label: result.isPdf && result.checks.find(c => c.id === 'xml')?.status === 'pass'
-            ? (result.pdfValidation && (!pdfA || pdfA.rules.every(rule => rule.status === 'pass'))
+            ? (result.pdfValidation && (!pdfA || pdfA.rules.every(rule => ['pass', 'not-applicable'].includes(rule.status)))
                 && ['embedding', 'metadata'].every(id => result.checks.find(c => c.id === id)?.status === 'pass')
                 ? 'XML und PDF-Basisprüfungen bestanden · PDF/A offen' : 'XML bestanden · PDF/A-Prüfung offen') : 'Konformität noch nicht bestätigt', status: 'unknown' };
         return { label: `XML-Prüfung bestanden · Profil ${result.profile}`, status: 'pass' };

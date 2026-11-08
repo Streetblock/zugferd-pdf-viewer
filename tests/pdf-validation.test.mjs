@@ -14,6 +14,7 @@ const V = dom.window.InvoiceValidation;
 const adapter = { parseXml: V.parse, decodeXml: V.decode, profileOf: V.profile };
 const xml = await readFile(new URL('fixtures/invoice.xml', import.meta.url), 'utf8');
 const status = (data, id) => data.pdfReport.checks.find(c => c.id === id).status;
+const completed = rule => rule.status === 'pass' || rule.status === 'not-applicable';
 
 test('PDF/A file rules detect individual defects without certifying the document', async () => {
     assert.equal(await sha256(referencePdf), referenceSha256);
@@ -24,8 +25,9 @@ test('PDF/A file rules detect individual defects without certifying the document
         assert.equal(report.sourceSha256, originalHash, name);
         assert.equal(report.profile, '3b', name);
         assert.equal(report.status, failedRule ? 'invalid' : 'partial', name);
-        assert.deepEqual(report.rules.filter(result => result.status === 'fail').map(result => result.id), failedRule ? [failedRule] : [], name);
-        if (!failedRule) assert.ok(report.rules.every(result => result.status === 'pass'), name);
+        const fileRules = report.rules.filter(result => result.id.startsWith('6.1.2-') || result.id.startsWith('6.1.3-'));
+        assert.deepEqual(fileRules.filter(result => result.status === 'fail').map(result => result.id), failedRule ? [failedRule] : [], name);
+        if (!failedRule) assert.ok(report.rules.every(completed), name);
     }
 });
 
@@ -35,7 +37,8 @@ test('EOF allows one logical EOL and unknown trailer evidence stays open', async
         assert.equal(report.rules.find(result => result.id === '6.1.3-3').status, eol === '\n\n' ? 'fail' : 'pass');
     }
     const report = await validatePdfA(makePdf(xml, { recovery: true }));
-    assert.equal(report.status, 'partial');
+    assert.equal(report.status, 'invalid');
+    assert.equal(report.rules.find(result => result.id === 'PDF-XREF-TARGET').status, 'fail');
     for (const id of ['6.1.3-1', '6.1.3-2', '6.1.3-3']) {
         assert.equal(report.rules.find(result => result.id === id).status, 'unknown');
     }
@@ -60,7 +63,8 @@ for (const options of [{}, { compressed: true, objectStream: true }, { increment
         assert.equal(status(data, 'metadata'), 'pass');
         assert.equal(status(data, 'pdf'), 'unknown');
         assert.equal(data.pdfReport.pdfA.profile, '3b');
-        assert.ok(data.pdfReport.pdfA.rules.every(result => result.status === 'pass'));
+        assert.ok(data.pdfReport.pdfA.rules.every(completed));
+        assert.equal(data.pdfReport.pdfA.structureCounts.revisions, options.incremental ? 2 : 1);
         assert.equal(data.pdfReport.status, 'partial');
         assert.ok(!JSON.stringify(data.pdfReport).includes('<rsm:CrossIndustryInvoice'));
     });
@@ -79,7 +83,11 @@ for (const [name, options, stage, expected] of [
     ['wrong namespace', { xmp: xmpFor().replace('http://www.aiim.org/pdfa/ns/id/', 'https://fake.invalid/') }, 'metadata', 'fail'],
     ['PDF/A-2 ID', { xmp: xmpFor().replace('pdfaid:part="3"', 'pdfaid:part="2"') }, 'metadata', 'fail'],
     ['unknown version', { xmp: xmpFor().replace('fx:Version="1.0"', 'fx:Version="9.9"') }, 'metadata', 'unknown'],
-]) test(name, async () => { const data = await extractInvoice(makePdf(xml, options), adapter); assert.equal(status(data, stage), expected); assert.equal(status(data, 'pdf'), 'unknown'); });
+]) test(name, async () => {
+    const data = await extractInvoice(makePdf(xml, options), adapter);
+    assert.equal(status(data, stage), expected);
+    assert.equal(status(data, 'pdf'), options.recovery ? 'fail' : 'unknown');
+});
 for (const options of [{ duplicate: true }, { conflicting: true }]) test('Reject ambiguous XML source: ' + JSON.stringify(options), async () => {
     await assert.rejects(extractInvoice(makePdf(xml, options), adapter), /Mehrere|Widersprüchliche/);
 });

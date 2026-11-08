@@ -1,5 +1,23 @@
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const textDecoder = new TextDecoder('latin1');
+const PDF_A_SPEC = 'ISO 19005-3:2012';
+const PDF_SPEC = 'ISO 32000-1:2008';
+const structureRules = [
+    { id: '6.1.4-2', specification: PDF_A_SPEC, clause: '6.1.4',
+        label: 'Zeilenumbruch nach dem xref-Schlüsselwort' },
+    { id: 'PDF-XREF-TARGET', specification: PDF_SPEC, clause: '7.5.5',
+        label: 'startxref und Beginn des letzten Querverweisabschnitts' },
+    { id: 'PDF-XREF-TABLE', specification: PDF_SPEC, clause: '7.5.4',
+        label: 'Abschnitte und Einträge klassischer Querverweistabellen' },
+    { id: 'PDF-XREF-STREAM', specification: PDF_SPEC, clause: '7.5.8',
+        label: 'Querverweisstreams mit /W, /Index und /Size' },
+    { id: 'PDF-XREF-ENTRY', specification: PDF_SPEC, clause: '7.5.4, 7.5.8',
+        label: 'Objektnummer und Generation am angegebenen Byteoffset' },
+    { id: 'PDF-XREF-PREV', specification: PDF_SPEC, clause: '7.5.6, 7.5.8.4',
+        label: 'Verkettung der Revisionen und Zuordnung hybrider Querverweise' },
+    { id: 'PDF-OBJECT-STREAM', specification: PDF_SPEC, clause: '7.5.7, 7.5.8',
+        label: 'Kopf und Zuordnung komprimierter Objekte in Objektstreams' },
+];
 let runtimePromise;
 
 export function loadPdfRuntime() {
@@ -104,20 +122,42 @@ function inspectEncryption(hasEncrypt) {
             : 'Im letzten Trailer ist /Encrypt nicht vorhanden.');
 }
 
+function inspectStructure(xref) {
+    const checks = new Map(xref?.checks?.map(check => [check.id, check]));
+    return structureRules.map(({ id, specification, clause, label }) => {
+        const evidence = checks.get(id);
+        const status = evidence?.status ?? 'unknown';
+        const suffix = {
+            pass: 'geprüft, kein Verstoß festgestellt',
+            fail: 'Verstoß festgestellt',
+            unknown: 'nicht abschließend prüfbar',
+            'not-applicable': 'nicht anwendbar',
+        }[status];
+        return {
+            ...rule(id, status, evidence?.location || 'Querverweise', `${label} – ${suffix}.`),
+            specification,
+            clause,
+            ...(evidence?.detail ? { evidence: evidence.detail } : {}),
+        };
+    });
+}
+
 function buildReport(profile, fileRules, inspection, passwordRequired = false) {
-    const trailer = inspection?.version === 1 ? inspection.trailer : null;
+    const { trailer, xref } = inspection?.version === 1 ? inspection : {};
     const rules = [
         ...fileRules.slice(0, 2),
         inspectTrailerId(trailer?.id),
         inspectEncryption(passwordRequired ? true : trailer?.hasEncrypt),
         fileRules[2],
+        ...inspectStructure(xref),
     ];
     return {
-        specification: 'ISO 19005-3:2012',
+        specification: PDF_A_SPEC,
         profile,
         coverage: 'file-structure-subset',
         status: rules.some(result => result.status === 'fail') ? 'invalid' : 'partial',
         rules,
+        ...(xref?.counts ? { structureCounts: xref.counts } : {}),
     };
 }
 

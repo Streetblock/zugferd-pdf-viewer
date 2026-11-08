@@ -21,6 +21,6 @@ for (const name of ['pdf.mjs', 'pdf.worker.mjs']) {
     files[name] = createHash('sha256').update(text).digest('hex');
 }
 await writeFile(new URL('LICENSE', destination), await readFile(path.join(source, 'LICENSE')));
-await writeFile(new URL('NOTICE', destination), `PDF.js: Mozilla Foundation and contributors, Apache-2.0.\nStreetblock modifications (2026): read-only embedded-file and PDF/A trailer inspection APIs.\nSource: https://github.com/Streetblock/pdf.js/tree/${commit}\nBuild: npm ci; npx gulp generic-legacy\nSource map comments removed; no runtime edits.\n`);
+await writeFile(new URL('NOTICE', destination), `PDF.js: Mozilla Foundation and contributors, Apache-2.0.\nStreetblock modifications (2026): read-only embedded-file and PDF/A structure inspection APIs.\nSource: https://github.com/Streetblock/pdf.js/tree/${commit}\nBuild: npm ci; npx gulp generic-legacy\nSource map comments removed; no runtime edits.\n`);
 await writeFile(new URL('manifest.json', destination), JSON.stringify({ repository: 'https://github.com/Streetblock/pdf.js', commit, build: 'generic-legacy', files }, null, 2) + '\n');
 console.log('Vendored PDF.js commit ' + commit);
