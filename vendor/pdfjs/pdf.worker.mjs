@@ -20,8 +20,8 @@
  */
 
 /**
- * pdfjsVersion = 6.4.163
- * pdfjsBuild = ac5fd6e4d
+ * pdfjsVersion = 6.4.164
+ * pdfjsBuild = 1ed51d8dc
  */
 /******/ var __webpack_modules__ = ({
 
@@ -873,6 +873,48 @@ module.exports = function (Constructor, list, $length) {
   var result = new Constructor(length);
   while (length > index) result[index] = list[index++];
   return result;
+};
+
+});
+
+// MODULE: ./node_modules/core-js/internals/array-group.js
+var array_group_namespaceFn = /*#__PURE__*/__webpack_require__.cw(function(module, exports) {
+
+var bind = (function_bind_context_namespaceFn());
+var uncurryThis = (function_uncurry_this_namespaceFn());
+var IndexedObject = (indexed_object_namespaceFn());
+var toObject = (to_object_namespaceFn());
+var toPropertyKey = (to_property_key_namespaceFn());
+var lengthOfArrayLike = (length_of_array_like_namespaceFn());
+var objectCreate = (object_create_namespaceFn());
+var arrayFromConstructorAndList = (array_from_constructor_and_list_namespaceFn());
+
+var $Array = Array;
+var push = uncurryThis([].push);
+
+module.exports = function ($this, callbackfn, that, specificConstructor) {
+  var O = toObject($this);
+  var self = IndexedObject(O);
+  var boundFunction = bind(callbackfn, that);
+  var target = objectCreate(null);
+  var length = lengthOfArrayLike(self);
+  var index = 0;
+  var Constructor, key, value;
+  for (;length > index; index++) {
+    value = self[index];
+    key = toPropertyKey(boundFunction(value, index, O));
+    // in some IE versions, `hasOwnProperty` returns incorrect result on integer keys
+    // but since it's a `null` prototype object, we can safely use `in`
+    if (key in target) push(target[key], value);
+    else target[key] = [value];
+  }
+  // TODO: Remove this block from `core-js@4`
+  if (specificConstructor) {
+    Constructor = specificConstructor(O);
+    if (Constructor !== $Array) {
+      for (key in target) target[key] = arrayFromConstructorAndList(Constructor, target[key]);
+    }
+  } return target;
 };
 
 });
@@ -5437,6 +5479,26 @@ $({ target: 'WeakMap', proto: true, real: true, forced: IS_PURE }, {
     return value;
   }
 });
+
+});
+
+// MODULE: ./node_modules/core-js/modules/esnext.array.group.js
+var esnext_array_group_namespaceFn = /*#__PURE__*/__webpack_require__.cw(function(module, exports) {
+
+var $ = (export_namespaceFn());
+var $group = (array_group_namespaceFn());
+var addToUnscopables = (add_to_unscopables_namespaceFn());
+
+// `Array.prototype.group` method
+// https://github.com/tc39/proposal-array-grouping
+$({ target: 'Array', proto: true }, {
+  group: function group(callbackfn /* , thisArg */) {
+    var thisArg = arguments.length > 1 ? arguments[1] : undefined;
+    return $group(this, callbackfn, thisArg);
+  }
+});
+
+addToUnscopables('group');
 
 });
 
@@ -63483,1397 +63545,6 @@ class DatasetReader {
 ;// ./node_modules/core-js/modules/es.iterator.take.js
 es_iterator_take_namespaceFn();
 
-;// ./src/core/pdfa_xref_inspection.js
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const MAX_DECODED_BYTES = 2 * 1024 * 1024;
-const MAX_TOTAL_DECODED_BYTES = 8 * 1024 * 1024;
-const MAX_DICTIONARY_BYTES = 64 * 1024;
-const MAX_SECTIONS = 128;
-const MAX_ENTRIES = 100_000;
-const MAX_OBJECT_STREAMS = 512;
-const IDS = ["6.1.4-2", "PDF-XREF-TARGET", "PDF-XREF-TABLE", "PDF-XREF-STREAM", "PDF-XREF-ENTRY", "PDF-XREF-PREV", "PDF-OBJECT-STREAM"];
-const RANK = {
-  "not-applicable": 0,
-  pass: 1,
-  unknown: 2,
-  fail: 3
-};
-function isWhite(byte) {
-  return byte === 0 || byte === 9 || byte === 10 || byte === 12 || byte === 13 || byte === 32;
-}
-function eolSize(bytes, offset) {
-  if (bytes[offset] === 13) {
-    return bytes[offset + 1] === 10 ? 2 : 1;
-  }
-  return bytes[offset] === 10 ? 1 : 0;
-}
-function isDelimiter(byte) {
-  return isWhite(byte) || "()<>[]{}/%".includes(String.fromCharCode(byte));
-}
-function hasToken(bytes, offset, token) {
-  return offset >= 0 && offset + token.length <= bytes.length && bytesToString(bytes.subarray(offset, offset + token.length)) === token && (offset + token.length === bytes.length || isDelimiter(bytes[offset + token.length]));
-}
-function skipWhite(bytes, offset, limit) {
-  while (offset < limit) {
-    if (isWhite(bytes[offset])) {
-      offset++;
-    } else if (bytes[offset] === 37) {
-      while (offset < limit && !eolSize(bytes, offset)) {
-        offset++;
-      }
-    } else {
-      break;
-    }
-  }
-  return offset;
-}
-function objectHeader(bytes, offset) {
-  if (offset < 0 || offset >= bytes.length || bytes[offset] !== 43 && (bytes[offset] < 48 || bytes[offset] > 57)) {
-    return null;
-  }
-  const end = Math.min(bytes.length, offset + 256);
-  const lexer = new Lexer(new Stream(bytes, offset, end - offset));
-  try {
-    const number = lexer.getObj();
-    const generation = lexer.getObj();
-    if (Number.isSafeInteger(number) && number > 0 && Number.isInteger(generation) && generation >= 0 && generation <= 65535 && isCmd(lexer.getObj(), "obj") && lexer.currentChar !== -1) {
-      return {
-        number,
-        generation,
-        end: lexer.stream.pos - 1
-      };
-    }
-  } catch {}
-  return end < bytes.length && lexer.stream.pos === end ? {
-    limited: true
-  } : null;
-}
-function parseDictionary(bytes, offset) {
-  const end = Math.min(bytes.length, offset + MAX_DICTIONARY_BYTES);
-  const start = skipWhite(bytes, offset, end);
-  if (start + 1 >= end || bytes[start] !== 60 || bytes[start + 1] !== 60) {
-    return null;
-  }
-  try {
-    const lexer = new Lexer(new Stream(bytes, start, end - start));
-    const parser = new Parser({
-      lexer,
-      xref: null
-    });
-    const dict = parser.getObj();
-    return dict instanceof Dict ? {
-      dict,
-      streamOffset: isCmd(parser.buf2, "stream") ? lexer.stream.pos - 1 : null
-    } : null;
-  } catch {
-    return null;
-  }
-}
-async function readFlate(data, limit) {
-  const reader = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate")).getReader();
-  try {
-    const chunks = [];
-    let length = 0;
-    for (;;) {
-      const {
-        done,
-        value
-      } = await reader.read();
-      if (done) {
-        break;
-      }
-      length += value.length;
-      if (length > limit) {
-        await reader.cancel();
-        return null;
-      }
-      chunks.push(value);
-    }
-    const result = new Uint8Array(length);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk, offset);
-      offset += chunk.length;
-    }
-    return result;
-  } finally {
-    reader.releaseLock();
-  }
-}
-class PdfAXRefInspection {
-  constructor(bytes, encrypted) {
-    this.bytes = bytes;
-    this.encrypted = encrypted;
-    this.checks = new Map();
-    this.counts = {
-      revisions: 0,
-      tables: 0,
-      streams: 0,
-      objectStreams: 0,
-      entries: 0
-    };
-    this.decodedRemaining = MAX_TOTAL_DECODED_BYTES;
-  }
-  note(id, status, offset, detail) {
-    const previous = this.checks.get(id);
-    if (!previous || RANK[status] > RANK[previous.status]) {
-      this.checks.set(id, {
-        id,
-        status,
-        location: (offset ?? null) === null ? "" : `Byte ${offset}`,
-        detail
-      });
-    }
-  }
-  unknownAll(detail) {
-    for (const id of IDS) {
-      this.note(id, "unknown", null, detail);
-    }
-  }
-  finish() {
-    return {
-      checks: IDS.map(id => this.checks.get(id) || {
-        id,
-        status: "not-applicable",
-        location: "",
-        detail: "No applicable structure in the inspected revision chain."
-      }),
-      counts: this.counts
-    };
-  }
-  acceptEntries(count, id, offset) {
-    if (this.counts.entries + count > MAX_ENTRIES) {
-      this.note(id, "unknown", offset, "Cross-reference entry limit exceeded.");
-      return false;
-    }
-    this.counts.entries += count;
-    return true;
-  }
-  async decode(dict, streamOffset) {
-    const {
-      bytes
-    } = this;
-    const length = dict.getRaw("Length");
-    const eol = eolSize(bytes, streamOffset);
-    const start = streamOffset + eol;
-    if (!eol || !Number.isSafeInteger(length) || length < 0 || start + length > bytes.length) {
-      return null;
-    }
-    const end = start + length;
-    if (!hasToken(bytes, end + eolSize(bytes, end), "endstream")) {
-      return null;
-    }
-    const limit = Math.min(MAX_DECODED_BYTES, this.decodedRemaining);
-    const filter = dict.getRaw("Filter");
-    const params = dict.getRaw("DecodeParms");
-    const flate = isName(filter, "FlateDecode") || Array.isArray(filter) && filter.length === 1 && isName(filter[0], "FlateDecode");
-    const parameters = Array.isArray(params) && params.length === 1 ? params[0] : params;
-    if ((parameters ?? null) !== null && !(parameters instanceof Dict)) {
-      return null;
-    }
-    const predictor = parameters?.getRaw("Predictor") ?? 1;
-    const colors = parameters?.getRaw("Colors") ?? 1;
-    const bits = parameters?.getRaw("BitsPerComponent") ?? 8;
-    const columns = parameters?.getRaw("Columns") ?? 1;
-    const rowBytes = Math.ceil(colors * columns * bits / 8);
-    if (predictor !== 1 && (!flate || ![2, 10, 11, 12, 13, 14, 15].includes(predictor) || !Number.isInteger(colors) || colors < 1 || colors > 32 || !Number.isInteger(columns) || columns < 1 || columns > 128 || ![1, 2, 4, 8, 16].includes(bits))) {
-      return null;
-    }
-    const source = bytes.subarray(start, end);
-    let decoded;
-    try {
-      if ((filter ?? null) === null) {
-        decoded = source.length <= limit ? source : null;
-      } else if (flate && limit > 0 && typeof DecompressionStream === "function") {
-        decoded = await readFlate(source, limit);
-        this.decodedRemaining -= decoded?.length ?? limit;
-        if (decoded && predictor !== 1) {
-          const encodedRow = rowBytes + (predictor === 2 ? 0 : 1);
-          if (decoded.length % encodedRow) {
-            return null;
-          }
-          decoded = new PredictorStream(new Stream(decoded), decoded.length, parameters).getBytes();
-        }
-        return decoded ?? null;
-      }
-    } catch {
-      return null;
-    }
-    if (decoded) {
-      this.decodedRemaining -= decoded.length;
-    }
-    return decoded ?? null;
-  }
-  table(offset) {
-    const id = "PDF-XREF-TABLE",
-      {
-        bytes
-      } = this;
-    this.counts.tables++;
-    const afterKeyword = offset + 4;
-    const eol = eolSize(bytes, afterKeyword);
-    let cursor = skipWhite(bytes, afterKeyword, Math.min(bytes.length, afterKeyword + 8192));
-    const singleEol = eol > 0 && cursor === afterKeyword + eol;
-    this.note("6.1.4-2", singleEol ? "pass" : "fail", afterKeyword, singleEol ? "One end-of-line marker follows xref." : "Exactly one end-of-line marker must separate xref and its first subsection.");
-    const rows = new Map();
-    if (hasToken(bytes, cursor, "trailer")) {
-      this.note(id, "fail", cursor, "Cross-reference table has no subsection.");
-      return null;
-    }
-    while (!hasToken(bytes, cursor, "trailer")) {
-      const headerLimit = Math.min(bytes.length, cursor + 256);
-      let end = cursor;
-      while (end < headerLimit && !eolSize(bytes, end)) {
-        end++;
-      }
-      if (end === headerLimit) {
-        this.note(id, "unknown", cursor, "Cross-reference subsection header could not be bounded.");
-        return null;
-      }
-      const header = /^(\d+)[ \t]+(\d+)[ \t]*$/.exec(bytesToString(bytes.subarray(cursor, end)));
-      const first = Number(header?.[1]),
-        count = Number(header?.[2]);
-      if (!Number.isSafeInteger(first) || !Number.isSafeInteger(count) || !Number.isSafeInteger(first + count) || count < 0) {
-        this.note(id, "fail", cursor, "Invalid cross-reference subsection header.");
-        return null;
-      }
-      if (!this.acceptEntries(count, id, cursor)) {
-        return null;
-      }
-      cursor = end + eolSize(bytes, end);
-      for (let i = 0; i < count; i++) {
-        const line = bytesToString(bytes.subarray(cursor, cursor + 20));
-        const row = /^(\d{10}) (\d{5}) ([nf])(?: \n| \r|\r\n)$/.exec(line);
-        const number = first + i;
-        if (!row || Number(row[2]) > 65535 || rows.has(number) || number === 0 && (row[3] !== "f" || Number(row[2]) !== 65535)) {
-          this.note(id, "fail", cursor, "Malformed fixed-width cross-reference row or duplicate entry.");
-          return null;
-        }
-        rows.set(number, {
-          type: row[3] === "n" ? 1 : 0,
-          offset: Number(row[1]),
-          generation: Number(row[2]),
-          location: cursor
-        });
-        cursor += 20;
-      }
-      cursor = skipWhite(bytes, cursor, Math.min(bytes.length, cursor + 8192));
-    }
-    const dict = parseDictionary(bytes, cursor + 7)?.dict;
-    if (!dict) {
-      this.note(id, "unknown", cursor, "The trailer dictionary could not be read.");
-      return null;
-    }
-    const size = dict.getRaw("Size");
-    if (!Number.isSafeInteger(size) || size < 1 || [...rows.keys()].some(number => number >= size)) {
-      this.note(id, "fail", cursor, "Invalid trailer /Size for the cross-reference rows.");
-      return null;
-    }
-    this.note(id, "pass", offset, "Cross-reference table subsection and row format checked.");
-    return {
-      kind: "table",
-      dict,
-      rows,
-      offset
-    };
-  }
-  async xrefStream(offset, dict, streamOffset) {
-    const id = "PDF-XREF-STREAM";
-    this.counts.streams++;
-    const size = dict.getRaw("Size");
-    const widths = dict.getRaw("W");
-    const index = dict.getRaw("Index") ?? [0, size];
-    if (!Number.isSafeInteger(size) || size < 1 || !Array.isArray(widths) || widths.length !== 3 || widths.some(width => !Number.isSafeInteger(width) || width < 0) || !Array.isArray(index) || index.length < 2 || index.length % 2) {
-      this.note(id, "fail", offset, "Invalid direct /Size, /W or /Index in cross-reference stream.");
-      return {
-        kind: "stream",
-        dict,
-        rows: null,
-        offset
-      };
-    }
-    let previousEnd = 0,
-      count = 0;
-    for (let i = 0; i < index.length; i += 2) {
-      const first = index[i],
-        length = index[i + 1];
-      if (!Number.isSafeInteger(first) || !Number.isSafeInteger(length) || first < previousEnd || length < 0 || first + length > size) {
-        this.note(id, "fail", offset, "Cross-reference stream /Index ranges overlap, are unsorted, or exceed /Size.");
-        return {
-          kind: "stream",
-          dict,
-          rows: null,
-          offset
-        };
-      }
-      previousEnd = first + length;
-      count += length;
-    }
-    if (widths.some(width => width > 6)) {
-      this.note(id, "unknown", offset, "Cross-reference stream field width is outside the inspection limits.");
-      return {
-        kind: "stream",
-        dict,
-        rows: null,
-        offset
-      };
-    }
-    if (!this.acceptEntries(count, id, offset)) {
-      return {
-        kind: "stream",
-        dict,
-        rows: null,
-        offset
-      };
-    }
-    const decoded = await this.decode(dict, streamOffset);
-    if (!decoded) {
-      this.note(id, "unknown", offset, "Cross-reference stream bounds, filter or decoder could not be verified.");
-      return {
-        kind: "stream",
-        dict,
-        rows: null,
-        offset
-      };
-    }
-    const rowWidth = widths[0] + widths[1] + widths[2];
-    if (decoded.length !== count * rowWidth) {
-      this.note(id, "fail", offset, "Decoded cross-reference stream length does not match /W and /Index.");
-      return {
-        kind: "stream",
-        dict,
-        rows: null,
-        offset
-      };
-    }
-    const rows = new Map();
-    let position = 0;
-    const readField = width => {
-      let value = 0;
-      for (let i = 0; i < width; i++) {
-        value = value * 256 + decoded[position++];
-      }
-      return value;
-    };
-    for (let i = 0; i < index.length; i += 2) {
-      for (let j = 0; j < index[i + 1]; j++) {
-        const type = widths[0] ? readField(widths[0]) : 1;
-        const pointer = readField(widths[1]);
-        const generation = readField(widths[2]);
-        const number = index[i] + j;
-        if (type > 2) {
-          this.note(id, "unknown", offset, "Cross-reference stream uses a reserved entry type.");
-          rows.set(number, {
-            type: 0,
-            location: offset
-          });
-          continue;
-        }
-        if (type <= 1 && generation > 65535 || number === 0 && type !== 0) {
-          this.note(id, "fail", offset, "Invalid generation or object-zero entry in cross-reference stream.");
-          return {
-            kind: "stream",
-            dict,
-            rows: null,
-            offset
-          };
-        }
-        rows.set(number, {
-          type,
-          offset: pointer,
-          generation,
-          location: offset
-        });
-      }
-    }
-    this.note(id, "pass", offset, "Cross-reference stream ranges and decoded row widths checked.");
-    return {
-      kind: "stream",
-      dict,
-      rows,
-      offset
-    };
-  }
-  async section(offset, id, streamOnly = false) {
-    const {
-      bytes
-    } = this;
-    if (hasToken(bytes, offset, "xref") && !streamOnly) {
-      this.note(id, "pass", offset, "Cross-reference pointer targets a table.");
-      return this.table(offset);
-    }
-    const header = objectHeader(bytes, offset);
-    const parsed = header && !header.limited && parseDictionary(bytes, header.end);
-    if ((parsed?.streamOffset ?? null) !== null && isName(parsed.dict.getRaw("Type"), "XRef")) {
-      this.note(id, "pass", offset, "Cross-reference pointer targets an XRef stream.");
-      return this.xrefStream(offset, parsed.dict, parsed.streamOffset);
-    }
-    this.note(id, header && !parsed ? "unknown" : "fail", offset, "Cross-reference pointer does not resolve to the expected table or XRef stream.");
-    return null;
-  }
-  inspectObjectOffsets(rows) {
-    const id = "PDF-XREF-ENTRY";
-    for (const [number, row] of rows) {
-      if (row.type !== 1) {
-        continue;
-      }
-      const header = objectHeader(this.bytes, row.offset);
-      if (header?.limited) {
-        this.note(id, "unknown", row.location, "Indirect object header exceeds the inspection limit.");
-        continue;
-      }
-      const valid = header?.number === number && header.generation === row.generation;
-      this.note(id, valid ? "pass" : "fail", row.location, valid ? "Uncompressed offsets point to matching indirect object headers." : `Entry ${number} ${row.generation} points to byte ${row.offset} without a matching indirect object header.`);
-    }
-  }
-  async readObjectStream(container, offset) {
-    const header = objectHeader(this.bytes, offset);
-    const parsed = header && !header.limited && parseDictionary(this.bytes, header.end);
-    if (!parsed || this.encrypted) {
-      return {
-        unknown: true
-      };
-    }
-    if (header.number !== container || header.generation !== 0 || !isName(parsed.dict.getRaw("Type"), "ObjStm") || parsed.streamOffset === null) {
-      return {};
-    }
-    const n = parsed.dict.getRaw("N");
-    const first = parsed.dict.getRaw("First");
-    if (n instanceof Ref || first instanceof Ref) {
-      return {
-        unknown: true
-      };
-    }
-    if (!Number.isSafeInteger(n) || n < 1 || !Number.isSafeInteger(first) || first < 1) {
-      return {};
-    }
-    if (n > MAX_ENTRIES) {
-      return {
-        unknown: true
-      };
-    }
-    const decoded = await this.decode(parsed.dict, parsed.streamOffset);
-    if (!decoded) {
-      return {
-        unknown: true
-      };
-    }
-    if (first >= decoded.length) {
-      return {};
-    }
-    try {
-      const lexer = new Lexer(new Stream(decoded.subarray(0, first)));
-      const numbers = [],
-        offsets = [];
-      const seen = new Set();
-      let previous = -1;
-      for (let i = 0; i < n; i++) {
-        const number = lexer.getObj(),
-          relative = lexer.getObj();
-        if (!Number.isSafeInteger(number) || number < 1 || seen.has(number) || !Number.isSafeInteger(relative) || relative <= previous || i === 0 && relative !== 0 || first + relative >= decoded.length || isWhite(decoded[first + relative]) || decoded[first + relative] === 37) {
-          return {};
-        }
-        seen.add(number);
-        numbers.push(number);
-        offsets.push(first + relative);
-        previous = relative;
-      }
-      if (lexer.getObj() !== EOF) {
-        return {};
-      }
-      for (let i = 0; i < offsets.length; i++) {
-        const body = decoded.subarray(offsets[i], offsets[i + 1]);
-        const parser = new Parser({
-          lexer: new Lexer(new Stream(body)),
-          xref: null
-        });
-        const object = parser.getObj();
-        if (object === EOF || object instanceof Cmd || parser.getObj() !== EOF) {
-          return {};
-        }
-      }
-      return {
-        numbers
-      };
-    } catch {
-      return {};
-    }
-  }
-  async inspectRows(revisions, chainComplete) {
-    const id = "PDF-OBJECT-STREAM",
-      latest = new Map(),
-      cache = new Map();
-    let effectiveComplete = chainComplete;
-    for (const revision of revisions.reverse()) {
-      const current = new Map();
-      if (revision.hasSupplement && !revision.supplement?.rows) {
-        effectiveComplete = false;
-      }
-      for (const section of [revision.supplement, revision.primary]) {
-        if (!section) {
-          continue;
-        }
-        if (!section.rows) {
-          effectiveComplete = false;
-          continue;
-        }
-        this.inspectObjectOffsets(section.rows);
-        for (const [number, row] of section.rows) {
-          current.set(number, row);
-        }
-      }
-      for (const [number, row] of current) {
-        latest.set(number, row);
-      }
-      const entries = revision === revisions.at(-1) ? latest : current;
-      for (const [number, row] of entries) {
-        if (row.type !== 2) {
-          continue;
-        }
-        if (!effectiveComplete && (!current.has(number) || !current.has(row.offset))) {
-          this.note(id, "unknown", row.location, "An unreadable revision may override the compressed entry or its stream.");
-          continue;
-        }
-        const container = latest.get(row.offset);
-        if (!container || container.type !== 1 || container.generation !== 0) {
-          this.note(id, effectiveComplete ? "fail" : "unknown", row.location, `Compressed entry ${number} has no usable generation-zero object stream.`);
-          continue;
-        }
-        const key = `${row.offset}@${container.offset}`;
-        if (!cache.has(key)) {
-          if (cache.size >= MAX_OBJECT_STREAMS) {
-            this.note(id, "unknown", row.location, "Object stream inspection limit exceeded.");
-            continue;
-          }
-          this.counts.objectStreams++;
-          cache.set(key, await this.readObjectStream(row.offset, container.offset));
-        }
-        const result = cache.get(key);
-        if (result.unknown) {
-          this.note(id, "unknown", container.offset, "Object stream could not be decoded within inspection limits.");
-        } else {
-          const valid = result.numbers?.[row.generation] === number;
-          this.note(id, valid ? "pass" : "fail", container.offset, valid ? "Compressed cross-reference entries match the object stream headers." : `Invalid object stream header or compressed entry ${number} does not match slot ${row.generation}.`);
-        }
-      }
-    }
-    if (!effectiveComplete) {
-      for (const rule of ["PDF-XREF-ENTRY", id]) {
-        this.note(rule, "unknown", null, "The complete cross-reference entry chain could not be inspected.");
-      }
-    }
-  }
-  async inspect(offset) {
-    const id = "PDF-XREF-PREV",
-      seen = new Set(),
-      revisions = [];
-    let complete = false;
-    while (seen.size < MAX_SECTIONS) {
-      seen.add(offset);
-      const primary = await this.section(offset, seen.size === 1 ? "PDF-XREF-TARGET" : id);
-      if (!primary) {
-        this.note(id, "unknown", offset, "The revision trailer could not be inspected.");
-        break;
-      }
-      this.counts.revisions++;
-      let supplement;
-      const hasSupplement = primary.kind === "table" && (primary.dict.getRaw("XRefStm") ?? null) !== null;
-      if (hasSupplement) {
-        const pointer = primary.dict.getRaw("XRefStm");
-        if (!Number.isSafeInteger(pointer) || pointer <= 0 || pointer >= offset) {
-          this.note(id, "fail", offset, "Invalid /XRefStm pointer for a hybrid revision.");
-        } else {
-          supplement = await this.section(pointer, id, true);
-        }
-      }
-      revisions.push({
-        primary,
-        supplement,
-        hasSupplement
-      });
-      if ((primary.dict.getRaw("Prev") ?? null) === null) {
-        this.note(id, "pass", offset, "Primary revision chain ends without another /Prev pointer.");
-        complete = true;
-        break;
-      }
-      const previous = primary.dict.getRaw("Prev");
-      if (!Number.isSafeInteger(previous) || previous <= 0 || previous >= offset || seen.has(previous)) {
-        this.note(id, "fail", offset, "Primary /Prev must point directly to an earlier cross-reference section.");
-        break;
-      }
-      offset = previous;
-    }
-    if (!complete) {
-      for (const rule of IDS) {
-        this.note(rule, "unknown", null, "The complete revision chain could not be inspected.");
-      }
-    }
-    await this.inspectRows(revisions, complete);
-  }
-}
-async function inspectPdfAXRef(stream, {
-  linearized,
-  encrypted
-}) {
-  const {
-    end
-  } = stream;
-  if (end > MAX_FILE_BYTES || linearized) {
-    const inspection = new PdfAXRefInspection(null, encrypted);
-    inspection.unknownAll(linearized ? "Linearized cross-reference layout is outside this inspection." : "File exceeds the cross-reference inspection size limit.");
-    return inspection.finish();
-  }
-  const bytes = stream.getByteRange(0, end);
-  const inspection = new PdfAXRefInspection(bytes, encrypted);
-  const tailStart = Math.max(0, bytes.length - 16_384);
-  const tail = bytesToString(bytes.subarray(tailStart));
-  const pointers = tail.matchAll(/[\r\n]startxref[ \t]*(?:\r\n|\r|\n)[ \t]*(\d+)[ \t]*(?:\r\n|\r|\n)%%EOF/g);
-  let offset = null;
-  let footerStart = null;
-  for (const match of pointers) {
-    offset = Number(match[1]);
-    footerStart = tailStart + match.index;
-  }
-  if (offset === null) {
-    inspection.unknownAll("No bounded startxref footer was found.");
-  } else if (!Number.isSafeInteger(offset) || offset <= 0 || offset >= footerStart) {
-    inspection.unknownAll("The declared startxref target is outside the document body.");
-    inspection.note("PDF-XREF-TARGET", "fail", null, "The declared startxref target is outside the document body.");
-  } else {
-    await inspection.inspect(offset);
-  }
-  return inspection.finish();
-}
-
-;// ./src/core/pdfa_color_inspection.js
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-const INTENT = "PDF-OUTPUT-INTENT",
-  ICC = "PDF-ICC-STRUCTURE";
-const OUTPUT = "6.2.3-1",
-  pdfa_color_inspection_SHARED = "6.2.3-2",
-  EXTERNAL = "6.2.3-3";
-const INPUT = "6.2.4.2-1";
-const DEVICES = new Map([["DeviceRGB", {
-  id: "6.2.4.3-2",
-  signature: "RGB ",
-  components: 3,
-  substitute: "DefaultRGB"
-}], ["DeviceCMYK", {
-  id: "6.2.4.3-3",
-  signature: "CMYK",
-  components: 4,
-  substitute: "DefaultCMYK"
-}], ["DeviceGray", {
-  id: "6.2.4.3-4",
-  signature: "GRAY",
-  components: 1,
-  substitute: "DefaultGray"
-}]]);
-const PAINT = [ICC, INPUT, ...Array.from(DEVICES.values(), device => device.id)];
-const RULES = [INTENT, OUTPUT, pdfa_color_inspection_SHARED, EXTERNAL, ...PAINT];
-const UNKNOWN = Symbol("unknown");
-const pdfa_color_inspection_RANK = {
-  "not-applicable": 0,
-  pass: 1,
-  unknown: 2,
-  fail: 3
-};
-const pdfa_color_inspection_MAX_DEPTH = 32,
-  MAX_ITEMS = 8192,
-  MAX_OPS = 200000;
-const MAX_BYTES = 4 * 1024 * 1024,
-  TOTAL_BYTES = 16 * 1024 * 1024;
-const CHANNELS = new Map([["GRAY", 1], ["RGB ", 3], ["CMYK", 4], ["Lab ", 3]]);
-const INPUT_CLASSES = new Set(["prtr", "mntr", "scnr", "spac"]);
-const SHORTCUTS = {
-  g: "DeviceGray",
-  G: "DeviceGray",
-  rg: "DeviceRGB",
-  RG: "DeviceRGB",
-  k: "DeviceCMYK",
-  K: "DeviceCMYK"
-};
-const FILL = new Set(["f", "F", "f*", "B", "B*", "b", "b*"]);
-const STROKE = new Set(["S", "s", "B", "B*", "b", "b*"]);
-const TEXT = new Set(["Tj", "TJ", "'", '"']);
-const absent = value => value === null || value === undefined;
-const pdfa_color_inspection_at = (path, key) => path + "/" + key;
-function profileHeader(bytes) {
-  if (!bytes) {
-    return {
-      status: "unknown"
-    };
-  }
-  if (bytes.length < 132) {
-    return {
-      status: "fail"
-    };
-  }
-  const word = offset => String.fromCharCode(...bytes.subarray(offset, offset + 4));
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const size = view.getUint32(0),
-    count = view.getUint32(128);
-  const dataStart = 132 + 12 * count;
-  if (word(36) !== "acsp" || !count || size < dataStart || size > bytes.length) {
-    return {
-      status: "fail"
-    };
-  }
-  if (count > 4096 || size < bytes.length) {
-    return {
-      status: "unknown"
-    };
-  }
-  for (let i = 0; i < count; i++) {
-    const offset = view.getUint32(136 + 12 * i),
-      length = view.getUint32(140 + 12 * i);
-    if (offset < dataStart || offset % 4 || length < 8 || offset + length > size) {
-      return {
-        status: "fail"
-      };
-    }
-  }
-  return {
-    status: "pass",
-    deviceClass: word(12),
-    space: word(16),
-    major: bytes[8]
-  };
-}
-class ColorInspection {
-  constructor(xref) {
-    this.xref = xref;
-    this.results = new Map();
-    this.counts = {
-      pages: 0,
-      streams: 0,
-      outputIntents: 0,
-      iccProfiles: 0,
-      deviceUses: 0
-    };
-    this.byteBudget = TOTAL_BYTES;
-    this.items = MAX_ITEMS;
-    this.ops = MAX_OPS;
-    this.bytesCache = new Map();
-    this.profiles = new Map();
-    this.pageNodes = new Set();
-    this.resourceNodes = new Set();
-    this.forms = new Set();
-    this.output = null;
-  }
-  note(id, status, location, detail) {
-    if (pdfa_color_inspection_RANK[status] > (pdfa_color_inspection_RANK[this.results.get(id)?.status] ?? -1)) {
-      this.results.set(id, {
-        id,
-        status,
-        location,
-        detail
-      });
-    }
-  }
-  check(id, condition, path, failure) {
-    this.note(id, condition ? "pass" : "fail", path, condition ? "Checked the supported condition." : failure);
-  }
-  unknown(path, detail, ids = PAINT) {
-    for (const id of ids) {
-      this.note(id, "unknown", path, detail);
-    }
-  }
-  take(path, depth) {
-    if (depth <= pdfa_color_inspection_MAX_DEPTH && this.items-- > 0) {
-      return true;
-    }
-    this.unknown(path, "The color inspection reached its traversal limit.");
-    return false;
-  }
-  resolve(value) {
-    if (!(value instanceof Ref)) {
-      return value === CIRCULAR_REF ? UNKNOWN : value;
-    }
-    try {
-      const entry = this.xref.getEntry(value.num);
-      if (!entry || (entry.uncompressed ? entry.gen : 0) !== value.gen) {
-        return UNKNOWN;
-      }
-      const resolved = this.xref.fetch(value);
-      return absent(resolved) || resolved === CIRCULAR_REF ? UNKNOWN : resolved;
-    } catch (error) {
-      if (error instanceof MissingDataException) {
-        throw error;
-      }
-      return UNKNOWN;
-    }
-  }
-  get(dict, key) {
-    return this.resolve(dict?.getRaw(key));
-  }
-  async bytes(stream) {
-    if (!(stream instanceof BaseStream) || !absent(this.get(stream.dict, "F"))) {
-      return null;
-    }
-    if (this.bytesCache.has(stream)) {
-      return this.bytesCache.get(stream);
-    }
-    let bytes = null;
-    const source = stream instanceof FlateStream ? stream.stream : stream;
-    const limit = Math.min(MAX_BYTES, this.byteBudget);
-    if (limit > 0 && source instanceof Stream && source.length <= MAX_BYTES) {
-      try {
-        if (stream instanceof FlateStream) {
-          if (typeof DecompressionStream === "function") {
-            bytes = await readFlate(source.getByteRange(source.start, source.end), limit);
-          }
-        } else if (source.length <= limit) {
-          bytes = source.getByteRange(source.start, source.end);
-        }
-      } catch (error) {
-        if (error instanceof MissingDataException) {
-          throw error;
-        }
-      }
-    }
-    this.bytesCache.set(stream, bytes);
-    if (bytes) {
-      this.byteBudget -= bytes.length;
-      this.counts.streams++;
-    }
-    return bytes;
-  }
-  async readProfile(stream) {
-    if (!this.profiles.has(stream)) {
-      this.counts.iccProfiles++;
-      const external = this.get(stream.dict, "F");
-      this.profiles.set(stream, external !== UNKNOWN && !absent(external) ? {
-        status: "fail"
-      } : profileHeader(await this.bytes(stream)));
-    }
-    return this.profiles.get(stream);
-  }
-  async profile(stream, path, use) {
-    const id = use === "output" ? OUTPUT : INPUT;
-    if (!(stream instanceof BaseStream)) {
-      const status = stream === UNKNOWN ? "unknown" : "fail";
-      this.note(ICC, status, path, "The ICC profile is not a readable embedded stream.");
-      this.note(id, status, path, "No embedded ICC profile stream could be verified.");
-      return null;
-    }
-    const profile = await this.readProfile(stream);
-    this.note(ICC, profile.status, path, {
-      pass: "ICC signature, profile size and tag extents were checked.",
-      fail: "The ICC stream is external or its signature, size or tag extents are invalid.",
-      unknown: "ICC profile bytes could not be fully inspected."
-    }[profile.status]);
-    if (profile.status !== "pass") {
-      this.note(id, profile.status, path, "The original ICC profile header could not be verified.");
-      return null;
-    }
-    const output = use === "output";
-    const allowedClass = output ? ["prtr", "mntr"].includes(profile.deviceClass) : INPUT_CLASSES.has(profile.deviceClass);
-    const allowedSpace = CHANNELS.has(profile.space) && (!output || profile.space !== "Lab ");
-    const allowed = allowedClass && allowedSpace && profile.major >= 2 && profile.major < 5;
-    this.check(id, allowed, path, "ICC profile class, data color space or version is outside the supported PDF/A-3 range.");
-    return allowed ? profile : null;
-  }
-  async intents(catalog) {
-    const path = "/Root/OutputIntents";
-    const intents = this.get(catalog, "OutputIntents");
-    if (absent(intents)) {
-      return;
-    }
-    if (!Array.isArray(intents) || intents.length > 128) {
-      this.note(INTENT, intents === UNKNOWN || Array.isArray(intents) ? "unknown" : "fail", path, "The output intents entry is not a readable array of supported size.");
-      this.output = UNKNOWN;
-      return;
-    }
-    let common,
-      unresolved = false;
-    for (let i = 0; i < intents.length; i++) {
-      const location = path + "[" + i + "]";
-      const intent = this.resolve(intents[i]);
-      if (!(intent instanceof Dict)) {
-        this.note(INTENT, intent === UNKNOWN ? "unknown" : "fail", location, "Output intent is not a readable dictionary.");
-        unresolved = true;
-        continue;
-      }
-      this.counts.outputIntents++;
-      const type = this.get(intent, "Type"),
-        sub = this.get(intent, "S");
-      const condition = this.get(intent, "OutputConditionIdentifier");
-      const fieldsValid = (absent(type) || isName(type, "OutputIntent")) && sub instanceof Name && typeof condition === "string";
-      if ([type, sub, condition].includes(UNKNOWN)) {
-        this.note(INTENT, "unknown", location, "Output intent fields could not be resolved.");
-      } else {
-        this.check(INTENT, fieldsValid, location, "The output intent has an invalid type, subtype or output condition identifier.");
-      }
-      if (sub === UNKNOWN) {
-        unresolved = true;
-        this.note(EXTERNAL, "unknown", location, "The output intent subtype is unreadable.");
-      } else if (isName(sub, "GTS_PDFX")) {
-        this.check(EXTERNAL, absent(intent.getRaw("DestOutputProfileRef")), location, "PDF/X output intent contains an external destination profile reference.");
-      }
-      const raw = intent.getRaw("DestOutputProfile");
-      if (!absent(raw) && intents.length > 1) {
-        const stream = this.resolve(raw);
-        const same = raw instanceof Ref && (!common || raw.num === common.num && raw.gen === common.gen);
-        if (same && stream instanceof BaseStream) {
-          const profile = await this.readProfile(stream);
-          this.note(pdfa_color_inspection_SHARED, profile.status, location, profile.status === "pass" ? "The shared ICC stream identity, header and tag extents were checked." : "The shared destination profile must be an embedded ICC stream with a readable header and tag table.");
-        } else if (same && stream === UNKNOWN) {
-          this.note(pdfa_color_inspection_SHARED, "unknown", location, "The shared destination profile could not be resolved.");
-        } else {
-          this.note(pdfa_color_inspection_SHARED, "fail", location, "Destination profiles must be the same indirect stream object.");
-        }
-        common ||= raw;
-      }
-      if (!isName(sub, "GTS_PDFA1")) {
-        continue;
-      }
-      const stream = this.resolve(raw);
-      const profilePath = pdfa_color_inspection_at(location, "DestOutputProfile");
-      const external = stream instanceof BaseStream ? this.get(stream.dict, "F") : null;
-      if (stream === UNKNOWN || external === UNKNOWN) {
-        this.note(INTENT, "unknown", profilePath, "The destination ICC stream could not be resolved.");
-      } else {
-        this.check(INTENT, stream instanceof BaseStream && absent(external), profilePath, "PDF/A output intent lacks an embedded destination ICC stream.");
-      }
-      const info = await this.profile(stream, profilePath, "output");
-      if (!fieldsValid || !info || this.output && this.output !== info.space) {
-        unresolved = true;
-      } else {
-        this.output = info.space;
-      }
-    }
-    if (unresolved) {
-      this.output = UNKNOWN;
-      if (intents.length > 1) {
-        this.note(pdfa_color_inspection_SHARED, "unknown", path, "A complete shared-profile comparison could not be made.");
-      }
-    }
-  }
-  resource(resources, group, name) {
-    const dict = resources instanceof Dict ? this.get(resources, group) : resources;
-    if (dict instanceof Dict) {
-      return this.get(dict, name);
-    }
-    return absent(dict) ? undefined : UNKNOWN;
-  }
-  async color(raw, resources, path, depth = 0) {
-    if (depth > pdfa_color_inspection_MAX_DEPTH) {
-      return UNKNOWN;
-    }
-    const space = this.resolve(raw);
-    if (space instanceof Name) {
-      if (DEVICES.has(space.name)) {
-        return {
-          device: DEVICES.get(space.name),
-          resources
-        };
-      }
-      if (space.name === "Pattern") {
-        return UNKNOWN;
-      }
-      const next = this.resource(resources, "ColorSpace", space.name);
-      return absent(next) ? UNKNOWN : this.color(next, resources, path, depth + 1);
-    }
-    if (!Array.isArray(space) || !(space[0] instanceof Name)) {
-      return UNKNOWN;
-    }
-    const type = space[0].name;
-    if (type === "ICCBased") {
-      const stream = this.resolve(space[1]);
-      const info = await this.profile(stream, path, "input");
-      if (!info) {
-        return UNKNOWN;
-      }
-      const n = this.get(stream.dict, "N");
-      if (n === UNKNOWN) {
-        this.note(ICC, "unknown", pdfa_color_inspection_at(path, "N"), "The ICCBased component count is unreadable.");
-        return UNKNOWN;
-      }
-      this.check(ICC, n === CHANNELS.get(info.space), pdfa_color_inspection_at(path, "N"), "ICCBased /N does not match the profile's data color space.");
-      return n === CHANNELS.get(info.space) ? {
-        components: n
-      } : UNKNOWN;
-    }
-    if (type === "Indexed") {
-      const base = await this.color(space[1], resources, pdfa_color_inspection_at(path, "Base"), depth + 1);
-      return base === UNKNOWN ? UNKNOWN : {
-        ...base,
-        forbiddenDefault: true
-      };
-    }
-    if (["CalGray", "CalRGB", "Lab"].includes(type)) {
-      const params = this.resolve(space[1]);
-      const white = params instanceof Dict ? this.get(params, "WhitePoint") : null;
-      if (Array.isArray(white) && white.length === 3 && white.every(Number.isFinite) && white[0] > 0 && white[1] === 1 && white[2] > 0) {
-        return {
-          components: type === "CalGray" ? 1 : 3,
-          forbiddenDefault: type === "Lab"
-        };
-      }
-    }
-    return UNKNOWN;
-  }
-  async resources(resources, path) {
-    if (!(resources instanceof Dict) || this.resourceNodes.has(resources)) {
-      return;
-    }
-    this.resourceNodes.add(resources);
-    const spaces = this.get(resources, "ColorSpace");
-    if (spaces === UNKNOWN) {
-      this.unknown(path, "The color space resource dictionary could not be resolved.");
-    } else if (spaces instanceof Dict) {
-      let index = 0;
-      for (const value of spaces.getRawValues()) {
-        if (!this.take(path, 0)) {
-          break;
-        }
-        await this.color(value, resources, path + "[" + index++ + "]");
-      }
-    }
-  }
-  async paint(space, path) {
-    if (space === UNKNOWN || !space) {
-      this.unknown(path, "The color space used for painting could not be resolved.");
-      return;
-    }
-    if (!space.device) {
-      return;
-    }
-    this.counts.deviceUses++;
-    const {
-      device,
-      resources
-    } = space;
-    const raw = this.resource(resources, "ColorSpace", device.substitute);
-    const alternative = absent(raw) ? null : await this.color(raw, resources, pdfa_color_inspection_at(path, device.substitute));
-    const hasDefault = !alternative?.forbiddenDefault && alternative?.components === device.components;
-    const hasOutput = typeof this.output === "string" && (device.signature === "GRAY" || this.output === device.signature);
-    if (hasDefault || hasOutput) {
-      this.check(device.id, true, path);
-    } else if (alternative === UNKNOWN || this.output === UNKNOWN) {
-      this.note(device.id, "unknown", path, "A possible default color space or output profile could not be verified.");
-    } else {
-      this.note(device.id, "fail", path, "Painting uses an uncalibrated device color without a suitable default or PDF/A output profile.");
-    }
-  }
-  async xobject(raw, resources, state, path, depth) {
-    const obj = this.resolve(raw);
-    if (!(obj instanceof BaseStream)) {
-      this.unknown(path, "The invoked XObject could not be inspected.");
-      return;
-    }
-    const type = this.get(obj.dict, "Subtype");
-    if (isName(type, "Image")) {
-      const mask = this.get(obj.dict, "ImageMask");
-      if (!absent(this.get(obj.dict, "SMask")) || mask === UNKNOWN) {
-        this.unknown(path, "Image mask or transparency is outside this inspection.");
-      } else if (mask === true) {
-        await this.paint(state.fill, path);
-      } else {
-        await this.paint(await this.color(this.get(obj.dict, "ColorSpace"), resources, path), path);
-      }
-      return;
-    }
-    if (!isName(type, "Form") || !absent(this.get(obj.dict, "Group")) || !absent(this.get(obj.dict, "Ref")) || this.forms.has(obj) || !this.take(path, depth)) {
-      this.unknown(path, "The invoked Form is cyclic, transparent, external or unsupported.");
-      return;
-    }
-    const entry = this.get(obj.dict, "Resources");
-    const local = absent(entry) ? state.pageResources : entry;
-    await this.resources(local, pdfa_color_inspection_at(path, "Resources"));
-    const bytes = await this.bytes(obj);
-    if (!bytes) {
-      this.unknown(path, "Form content could not be read.");
-      return;
-    }
-    this.forms.add(obj);
-    try {
-      await this.content(bytes, local, {
-        ...state
-      }, path, depth);
-    } finally {
-      this.forms.delete(obj);
-    }
-  }
-  async content(bytes, resources, state, path, depth) {
-    if (!bytes.length) {
-      return;
-    }
-    const stack = [],
-      args = [];
-    let inText = false,
-      hasPath = false;
-    try {
-      const parser = new Parser({
-        lexer: new Lexer(new Stream(bytes)),
-        xref: null
-      });
-      while (parser.buf1 !== EOF) {
-        if (this.ops-- <= 0 || parser.buf1 instanceof Cmd && parser.buf1.cmd === "BI") {
-          this.unknown(path, "Inline images or the operation limit prevent complete inspection.");
-          return;
-        }
-        const token = parser.getObj();
-        if (!(token instanceof Cmd)) {
-          if (token instanceof Ref || args.length > 32) {
-            throw new Error("Invalid operands");
-          }
-          args.push(token);
-          continue;
-        }
-        const op = token.cmd,
-          location = pdfa_color_inspection_at(path, op);
-        const definition = EvaluatorPreprocessor.opMap[op];
-        if (!definition || (definition.variableArgs ? args.length > definition.numArgs : args.length !== definition.numArgs)) {
-          throw new Error("Invalid operator");
-        }
-        if (op === "q") {
-          if (stack.length >= pdfa_color_inspection_MAX_DEPTH) {
-            throw new Error("Graphics stack limit");
-          }
-          stack.push({
-            ...state
-          });
-        } else if (op === "Q") {
-          if (!stack.length) {
-            throw new Error("Unmatched graphics restore");
-          }
-          state = stack.pop();
-        } else if (Object.hasOwn(SHORTCUTS, op)) {
-          const kind = op === op.toUpperCase() ? "stroke" : "fill";
-          state[kind] = args.every(Number.isFinite) ? {
-            device: DEVICES.get(SHORTCUTS[op]),
-            resources
-          } : UNKNOWN;
-        } else if (op === "cs" || op === "CS") {
-          state[op === "cs" ? "fill" : "stroke"] = await this.color(args[0], resources, location);
-        } else if (["m", "l", "c", "v", "y", "re"].includes(op)) {
-          hasPath = true;
-        } else if (op === "n" || FILL.has(op) || STROKE.has(op)) {
-          if (hasPath && FILL.has(op)) {
-            await this.paint(state.fill, location);
-          }
-          if (hasPath && STROKE.has(op)) {
-            await this.paint(state.stroke, location);
-          }
-          hasPath = false;
-        } else if (op === "Do") {
-          const obj = args[0] instanceof Name ? this.resource(resources, "XObject", args[0].name) : UNKNOWN;
-          await this.xobject(obj, resources, state, location, depth + 1);
-        } else if (op === "sh") {
-          this.unknown(location, "Shading is outside this color inspection.");
-        } else if (op === "BT" || op === "ET") {
-          if (inText === (op === "BT")) {
-            throw new Error("Invalid text boundary");
-          }
-          inText = op === "BT";
-        } else if (op === "Tr") {
-          state.mode = Number.isInteger(args[0]) && args[0] >= 0 && args[0] <= 7 ? args[0] : UNKNOWN;
-        } else if (op === "Tf") {
-          state.font = args[0] instanceof Name ? this.resource(resources, "Font", args[0].name) : UNKNOWN;
-        } else if (op === "gs") {
-          const gs = args[0] instanceof Name ? this.resource(resources, "ExtGState", args[0].name) : UNKNOWN;
-          if (!(gs instanceof Dict)) {
-            state.font = UNKNOWN;
-            this.unknown(location, "The graphics state could not be inspected.");
-          } else {
-            const font = this.get(gs, "Font"),
-              mask = this.get(gs, "SMask");
-            if (!absent(font)) {
-              state.font = Array.isArray(font) ? this.resolve(font[0]) : UNKNOWN;
-            }
-            if (!absent(mask) && !isName(mask, "None")) {
-              this.unknown(location, "Soft-mask colors are outside this inspection.");
-            }
-          }
-        } else if (TEXT.has(op)) {
-          const shown = args.at(-1);
-          const valid = op === "TJ" ? Array.isArray(shown) && shown.every(item => typeof item === "string" || Number.isFinite(item)) : typeof shown === "string";
-          if (!valid || !inText) {
-            throw new Error("Invalid text show");
-          }
-          if ((Array.isArray(shown) ? shown : [shown]).some(item => typeof item === "string" && item.length) && state.mode !== 3 && state.mode !== 7) {
-            const font = state.font;
-            if (state.mode === UNKNOWN || !(font instanceof Dict) || !(this.get(font, "Subtype") instanceof Name) || isName(this.get(font, "Subtype"), "Type3")) {
-              this.unknown(location, "The text rendering mode or Type 3 color use is outside this inspection.");
-            } else {
-              const base = state.mode % 4;
-              if (base === 0 || base === 2) {
-                await this.paint(state.fill, location);
-              }
-              if (base === 1 || base === 2) {
-                await this.paint(state.stroke, location);
-              }
-            }
-          }
-        }
-        args.length = 0;
-      }
-      if (args.length || inText || stack.length) {
-        this.unknown(path, "The content stream ended in an incomplete graphics state.");
-      }
-    } catch (error) {
-      if (error instanceof MissingDataException) {
-        throw error;
-      }
-      this.unknown(path, "Unsupported or malformed content prevented complete color inspection.");
-    }
-  }
-  async page(raw, inherited, path, depth) {
-    if (!this.take(path, depth)) {
-      return;
-    }
-    const node = this.resolve(raw);
-    if (!(node instanceof Dict) || this.pageNodes.has(node)) {
-      this.unknown(path, "The page tree could not be fully inspected.");
-      return;
-    }
-    this.pageNodes.add(node);
-    const entry = this.get(node, "Resources");
-    const resources = absent(entry) ? inherited : entry;
-    const type = this.get(node, "Type");
-    if (isName(type, "Pages")) {
-      const kids = this.get(node, "Kids");
-      if (!Array.isArray(kids) || kids.length > MAX_ITEMS) {
-        this.unknown(path, "The page-tree children could not be inspected.");
-        return;
-      }
-      for (let i = 0; i < kids.length; i++) {
-        await this.page(kids[i], resources, path + "/Kids[" + i + "]", depth + 1);
-      }
-      return;
-    }
-    if (!isName(type, "Page")) {
-      this.unknown(path, "A page dictionary could not be resolved.");
-      return;
-    }
-    this.counts.pages++;
-    await this.resources(resources, pdfa_color_inspection_at(path, "Resources"));
-    const annotations = this.get(node, "Annots");
-    if (!absent(annotations) && (!Array.isArray(annotations) || annotations.length > MAX_ITEMS || annotations.some(rawAnnot => {
-      const annotation = this.resolve(rawAnnot);
-      return !(annotation instanceof Dict) || !absent(this.get(annotation, "AP")) || !absent(this.get(annotation, "C"));
-    }))) {
-      this.unknown(pdfa_color_inspection_at(path, "Annots"), "Annotation appearance colors are outside this inspection.");
-    }
-    if (!absent(this.get(node, "Group"))) {
-      this.unknown(pdfa_color_inspection_at(path, "Group"), "Page transparency groups are outside this inspection.");
-      return;
-    }
-    const contents = this.get(node, "Contents");
-    if (absent(contents)) {
-      return;
-    }
-    const streams = Array.isArray(contents) ? contents : [contents];
-    if (streams.length > MAX_ITEMS) {
-      this.unknown(path, "The page contains too many content streams.");
-      return;
-    }
-    const parts = [];
-    let length = 0;
-    for (const stream of streams) {
-      const bytes = await this.bytes(this.resolve(stream));
-      if (!bytes || (length += bytes.length) > MAX_BYTES) {
-        this.unknown(path, "The complete page content could not be read.");
-        return;
-      }
-      parts.push(bytes);
-    }
-    const combined = parts.length === 1 ? parts[0] : new Uint8Array(length);
-    if (parts.length !== 1) {
-      let offset = 0;
-      for (const bytes of parts) {
-        combined.set(bytes, offset);
-        offset += bytes.length;
-      }
-    }
-    const gray = {
-      device: DEVICES.get("DeviceGray"),
-      resources
-    };
-    await this.content(combined, resources, {
-      fill: gray,
-      stroke: gray,
-      mode: 0,
-      font: null,
-      pageResources: resources
-    }, pdfa_color_inspection_at(path, "Contents"), depth);
-  }
-  finish() {
-    return {
-      checks: RULES.map(id => this.results.get(id) ?? {
-        id,
-        status: "not-applicable",
-        location: "",
-        detail: "No applicable color evidence in the inspected scope."
-      }),
-      counts: this.counts
-    };
-  }
-}
-async function inspectPdfAColors(xref, trusted) {
-  const inspection = new ColorInspection(xref);
-  const catalog = trusted && !xref.encrypt ? inspection.get(xref.trailer, "Root") : null;
-  if (!(catalog instanceof Dict)) {
-    inspection.unknown("/Root", "The original document color objects could not be established.", RULES);
-  } else {
-    await inspection.intents(catalog);
-    await inspection.page(catalog.getRaw("Pages"), null, "/Root/Pages", 0);
-  }
-  return inspection.finish();
-}
-
 ;// ./src/core/pdfa_document_inspection.js
 
 
@@ -64894,7 +63565,7 @@ async function inspectPdfAColors(xref, trusted) {
 const pdfa_document_inspection_MAX_DEPTH = 48;
 const MAX_VISITS = 16_384;
 const UNREADABLE = Symbol("unreadable");
-const pdfa_document_inspection_RANK = {
+const RANK = {
   "not-applicable": 0,
   pass: 1,
   unknown: 2,
@@ -64940,7 +63611,7 @@ class PdfADocumentInspection {
   }
   note(id, status, location, detail) {
     const previous = this.checks.get(id);
-    if (!previous || pdfa_document_inspection_RANK[status] > pdfa_document_inspection_RANK[previous.status]) {
+    if (!previous || RANK[status] > RANK[previous.status]) {
       this.checks.set(id, {
         id,
         status,
@@ -65524,7 +64195,7 @@ function inspectPdfADocument(xref, trusted) {
 
 
 
-const pdfa_embedded_file_inspection_RULES = ["PDF-EMBEDDED-FILE", "6.8-1", "6.8-2", "6.8-3", "6.8-4"];
+const RULES = ["PDF-EMBEDDED-FILE", "6.8-1", "6.8-2", "6.8-3", "6.8-4"];
 const RELATIONSHIPS = new Set(["Source", "Data", "Alternative", "Supplement", "Unspecified"]);
 const pdfa_embedded_file_inspection_RANK = {
   "not-applicable": 0,
@@ -65574,7 +64245,7 @@ class PdfAEmbeddedFileInspection {
   }
   unknown(path, detail) {
     this.incomplete = true;
-    for (const id of pdfa_embedded_file_inspection_RULES) {
+    for (const id of RULES) {
       this.note(id, "unknown", path, detail);
     }
   }
@@ -65996,7 +64667,7 @@ class PdfAEmbeddedFileInspection {
     this.counts.fileSpecifications = this.files.size;
     this.counts.streams = this.streams.size;
     return {
-      checks: pdfa_embedded_file_inspection_RULES.map(id => this.checks.get(id) || {
+      checks: RULES.map(id => this.checks.get(id) || {
         id,
         status: "not-applicable",
         location: "",
@@ -66010,6 +64681,691 @@ function inspectPdfAEmbeddedFiles(xref, trusted) {
   const inspector = new PdfAEmbeddedFileInspection(xref);
   inspector.inspect(trusted);
   return inspector.finish();
+}
+
+;// ./src/core/pdfa_xref_inspection.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_DECODED_BYTES = 2 * 1024 * 1024;
+const MAX_TOTAL_DECODED_BYTES = 8 * 1024 * 1024;
+const MAX_DICTIONARY_BYTES = 64 * 1024;
+const MAX_SECTIONS = 128;
+const MAX_ENTRIES = 100_000;
+const MAX_OBJECT_STREAMS = 512;
+const IDS = ["6.1.4-2", "PDF-XREF-TARGET", "PDF-XREF-TABLE", "PDF-XREF-STREAM", "PDF-XREF-ENTRY", "PDF-XREF-PREV", "PDF-OBJECT-STREAM"];
+const pdfa_xref_inspection_RANK = {
+  "not-applicable": 0,
+  pass: 1,
+  unknown: 2,
+  fail: 3
+};
+function isWhite(byte) {
+  return byte === 0 || byte === 9 || byte === 10 || byte === 12 || byte === 13 || byte === 32;
+}
+function eolSize(bytes, offset) {
+  if (bytes[offset] === 13) {
+    return bytes[offset + 1] === 10 ? 2 : 1;
+  }
+  return bytes[offset] === 10 ? 1 : 0;
+}
+function isDelimiter(byte) {
+  return isWhite(byte) || "()<>[]{}/%".includes(String.fromCharCode(byte));
+}
+function hasToken(bytes, offset, token) {
+  return offset >= 0 && offset + token.length <= bytes.length && bytesToString(bytes.subarray(offset, offset + token.length)) === token && (offset + token.length === bytes.length || isDelimiter(bytes[offset + token.length]));
+}
+function skipWhite(bytes, offset, limit) {
+  while (offset < limit) {
+    if (isWhite(bytes[offset])) {
+      offset++;
+    } else if (bytes[offset] === 37) {
+      while (offset < limit && !eolSize(bytes, offset)) {
+        offset++;
+      }
+    } else {
+      break;
+    }
+  }
+  return offset;
+}
+function objectHeader(bytes, offset) {
+  if (offset < 0 || offset >= bytes.length || bytes[offset] !== 43 && (bytes[offset] < 48 || bytes[offset] > 57)) {
+    return null;
+  }
+  const end = Math.min(bytes.length, offset + 256);
+  const lexer = new Lexer(new Stream(bytes, offset, end - offset));
+  try {
+    const number = lexer.getObj();
+    const generation = lexer.getObj();
+    if (Number.isSafeInteger(number) && number > 0 && Number.isInteger(generation) && generation >= 0 && generation <= 65535 && isCmd(lexer.getObj(), "obj") && lexer.currentChar !== -1) {
+      return {
+        number,
+        generation,
+        end: lexer.stream.pos - 1
+      };
+    }
+  } catch {}
+  return end < bytes.length && lexer.stream.pos === end ? {
+    limited: true
+  } : null;
+}
+function parseDictionary(bytes, offset) {
+  const end = Math.min(bytes.length, offset + MAX_DICTIONARY_BYTES);
+  const start = skipWhite(bytes, offset, end);
+  if (start + 1 >= end || bytes[start] !== 60 || bytes[start + 1] !== 60) {
+    return null;
+  }
+  try {
+    const lexer = new Lexer(new Stream(bytes, start, end - start));
+    const parser = new Parser({
+      lexer,
+      xref: null
+    });
+    const dict = parser.getObj();
+    return dict instanceof Dict ? {
+      dict,
+      streamOffset: isCmd(parser.buf2, "stream") ? lexer.stream.pos - 1 : null
+    } : null;
+  } catch {
+    return null;
+  }
+}
+async function readFlate(data, limit) {
+  const reader = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate")).getReader();
+  try {
+    const chunks = [];
+    let length = 0;
+    for (;;) {
+      const {
+        done,
+        value
+      } = await reader.read();
+      if (done) {
+        break;
+      }
+      length += value.length;
+      if (length > limit) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+    const result = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return result;
+  } finally {
+    reader.releaseLock();
+  }
+}
+class PdfAXRefInspection {
+  constructor(bytes, encrypted) {
+    this.bytes = bytes;
+    this.encrypted = encrypted;
+    this.checks = new Map();
+    this.counts = {
+      revisions: 0,
+      tables: 0,
+      streams: 0,
+      objectStreams: 0,
+      entries: 0
+    };
+    this.decodedRemaining = MAX_TOTAL_DECODED_BYTES;
+  }
+  note(id, status, offset, detail) {
+    const previous = this.checks.get(id);
+    if (!previous || pdfa_xref_inspection_RANK[status] > pdfa_xref_inspection_RANK[previous.status]) {
+      this.checks.set(id, {
+        id,
+        status,
+        location: (offset ?? null) === null ? "" : `Byte ${offset}`,
+        detail
+      });
+    }
+  }
+  unknownAll(detail) {
+    for (const id of IDS) {
+      this.note(id, "unknown", null, detail);
+    }
+  }
+  finish() {
+    return {
+      checks: IDS.map(id => this.checks.get(id) || {
+        id,
+        status: "not-applicable",
+        location: "",
+        detail: "No applicable structure in the inspected revision chain."
+      }),
+      counts: this.counts
+    };
+  }
+  acceptEntries(count, id, offset) {
+    if (this.counts.entries + count > MAX_ENTRIES) {
+      this.note(id, "unknown", offset, "Cross-reference entry limit exceeded.");
+      return false;
+    }
+    this.counts.entries += count;
+    return true;
+  }
+  async decode(dict, streamOffset) {
+    const {
+      bytes
+    } = this;
+    const length = dict.getRaw("Length");
+    const eol = eolSize(bytes, streamOffset);
+    const start = streamOffset + eol;
+    if (!eol || !Number.isSafeInteger(length) || length < 0 || start + length > bytes.length) {
+      return null;
+    }
+    const end = start + length;
+    if (!hasToken(bytes, end + eolSize(bytes, end), "endstream")) {
+      return null;
+    }
+    const limit = Math.min(MAX_DECODED_BYTES, this.decodedRemaining);
+    const filter = dict.getRaw("Filter");
+    const params = dict.getRaw("DecodeParms");
+    const flate = isName(filter, "FlateDecode") || Array.isArray(filter) && filter.length === 1 && isName(filter[0], "FlateDecode");
+    const parameters = Array.isArray(params) && params.length === 1 ? params[0] : params;
+    if ((parameters ?? null) !== null && !(parameters instanceof Dict)) {
+      return null;
+    }
+    const predictor = parameters?.getRaw("Predictor") ?? 1;
+    const colors = parameters?.getRaw("Colors") ?? 1;
+    const bits = parameters?.getRaw("BitsPerComponent") ?? 8;
+    const columns = parameters?.getRaw("Columns") ?? 1;
+    const rowBytes = Math.ceil(colors * columns * bits / 8);
+    if (predictor !== 1 && (!flate || ![2, 10, 11, 12, 13, 14, 15].includes(predictor) || !Number.isInteger(colors) || colors < 1 || colors > 32 || !Number.isInteger(columns) || columns < 1 || columns > 128 || ![1, 2, 4, 8, 16].includes(bits))) {
+      return null;
+    }
+    const source = bytes.subarray(start, end);
+    let decoded;
+    try {
+      if ((filter ?? null) === null) {
+        decoded = source.length <= limit ? source : null;
+      } else if (flate && limit > 0 && typeof DecompressionStream === "function") {
+        decoded = await readFlate(source, limit);
+        this.decodedRemaining -= decoded?.length ?? limit;
+        if (decoded && predictor !== 1) {
+          const encodedRow = rowBytes + (predictor === 2 ? 0 : 1);
+          if (decoded.length % encodedRow) {
+            return null;
+          }
+          decoded = new PredictorStream(new Stream(decoded), decoded.length, parameters).getBytes();
+        }
+        return decoded ?? null;
+      }
+    } catch {
+      return null;
+    }
+    if (decoded) {
+      this.decodedRemaining -= decoded.length;
+    }
+    return decoded ?? null;
+  }
+  table(offset) {
+    const id = "PDF-XREF-TABLE",
+      {
+        bytes
+      } = this;
+    this.counts.tables++;
+    const afterKeyword = offset + 4;
+    const eol = eolSize(bytes, afterKeyword);
+    let cursor = skipWhite(bytes, afterKeyword, Math.min(bytes.length, afterKeyword + 8192));
+    const singleEol = eol > 0 && cursor === afterKeyword + eol;
+    this.note("6.1.4-2", singleEol ? "pass" : "fail", afterKeyword, singleEol ? "One end-of-line marker follows xref." : "Exactly one end-of-line marker must separate xref and its first subsection.");
+    const rows = new Map();
+    if (hasToken(bytes, cursor, "trailer")) {
+      this.note(id, "fail", cursor, "Cross-reference table has no subsection.");
+      return null;
+    }
+    while (!hasToken(bytes, cursor, "trailer")) {
+      const headerLimit = Math.min(bytes.length, cursor + 256);
+      let end = cursor;
+      while (end < headerLimit && !eolSize(bytes, end)) {
+        end++;
+      }
+      if (end === headerLimit) {
+        this.note(id, "unknown", cursor, "Cross-reference subsection header could not be bounded.");
+        return null;
+      }
+      const header = /^(\d+)[ \t]+(\d+)[ \t]*$/.exec(bytesToString(bytes.subarray(cursor, end)));
+      const first = Number(header?.[1]),
+        count = Number(header?.[2]);
+      if (!Number.isSafeInteger(first) || !Number.isSafeInteger(count) || !Number.isSafeInteger(first + count) || count < 0) {
+        this.note(id, "fail", cursor, "Invalid cross-reference subsection header.");
+        return null;
+      }
+      if (!this.acceptEntries(count, id, cursor)) {
+        return null;
+      }
+      cursor = end + eolSize(bytes, end);
+      for (let i = 0; i < count; i++) {
+        const line = bytesToString(bytes.subarray(cursor, cursor + 20));
+        const row = /^(\d{10}) (\d{5}) ([nf])(?: \n| \r|\r\n)$/.exec(line);
+        const number = first + i;
+        if (!row || Number(row[2]) > 65535 || rows.has(number) || number === 0 && (row[3] !== "f" || Number(row[2]) !== 65535)) {
+          this.note(id, "fail", cursor, "Malformed fixed-width cross-reference row or duplicate entry.");
+          return null;
+        }
+        rows.set(number, {
+          type: row[3] === "n" ? 1 : 0,
+          offset: Number(row[1]),
+          generation: Number(row[2]),
+          location: cursor
+        });
+        cursor += 20;
+      }
+      cursor = skipWhite(bytes, cursor, Math.min(bytes.length, cursor + 8192));
+    }
+    const dict = parseDictionary(bytes, cursor + 7)?.dict;
+    if (!dict) {
+      this.note(id, "unknown", cursor, "The trailer dictionary could not be read.");
+      return null;
+    }
+    const size = dict.getRaw("Size");
+    if (!Number.isSafeInteger(size) || size < 1 || [...rows.keys()].some(number => number >= size)) {
+      this.note(id, "fail", cursor, "Invalid trailer /Size for the cross-reference rows.");
+      return null;
+    }
+    this.note(id, "pass", offset, "Cross-reference table subsection and row format checked.");
+    return {
+      kind: "table",
+      dict,
+      rows,
+      offset
+    };
+  }
+  async xrefStream(offset, dict, streamOffset) {
+    const id = "PDF-XREF-STREAM";
+    this.counts.streams++;
+    const size = dict.getRaw("Size");
+    const widths = dict.getRaw("W");
+    const index = dict.getRaw("Index") ?? [0, size];
+    if (!Number.isSafeInteger(size) || size < 1 || !Array.isArray(widths) || widths.length !== 3 || widths.some(width => !Number.isSafeInteger(width) || width < 0) || !Array.isArray(index) || index.length < 2 || index.length % 2) {
+      this.note(id, "fail", offset, "Invalid direct /Size, /W or /Index in cross-reference stream.");
+      return {
+        kind: "stream",
+        dict,
+        rows: null,
+        offset
+      };
+    }
+    let previousEnd = 0,
+      count = 0;
+    for (let i = 0; i < index.length; i += 2) {
+      const first = index[i],
+        length = index[i + 1];
+      if (!Number.isSafeInteger(first) || !Number.isSafeInteger(length) || first < previousEnd || length < 0 || first + length > size) {
+        this.note(id, "fail", offset, "Cross-reference stream /Index ranges overlap, are unsorted, or exceed /Size.");
+        return {
+          kind: "stream",
+          dict,
+          rows: null,
+          offset
+        };
+      }
+      previousEnd = first + length;
+      count += length;
+    }
+    if (widths.some(width => width > 6)) {
+      this.note(id, "unknown", offset, "Cross-reference stream field width is outside the inspection limits.");
+      return {
+        kind: "stream",
+        dict,
+        rows: null,
+        offset
+      };
+    }
+    if (!this.acceptEntries(count, id, offset)) {
+      return {
+        kind: "stream",
+        dict,
+        rows: null,
+        offset
+      };
+    }
+    const decoded = await this.decode(dict, streamOffset);
+    if (!decoded) {
+      this.note(id, "unknown", offset, "Cross-reference stream bounds, filter or decoder could not be verified.");
+      return {
+        kind: "stream",
+        dict,
+        rows: null,
+        offset
+      };
+    }
+    const rowWidth = widths[0] + widths[1] + widths[2];
+    if (decoded.length !== count * rowWidth) {
+      this.note(id, "fail", offset, "Decoded cross-reference stream length does not match /W and /Index.");
+      return {
+        kind: "stream",
+        dict,
+        rows: null,
+        offset
+      };
+    }
+    const rows = new Map();
+    let position = 0;
+    const readField = width => {
+      let value = 0;
+      for (let i = 0; i < width; i++) {
+        value = value * 256 + decoded[position++];
+      }
+      return value;
+    };
+    for (let i = 0; i < index.length; i += 2) {
+      for (let j = 0; j < index[i + 1]; j++) {
+        const type = widths[0] ? readField(widths[0]) : 1;
+        const pointer = readField(widths[1]);
+        const generation = readField(widths[2]);
+        const number = index[i] + j;
+        if (type > 2) {
+          this.note(id, "unknown", offset, "Cross-reference stream uses a reserved entry type.");
+          rows.set(number, {
+            type: 0,
+            location: offset
+          });
+          continue;
+        }
+        if (type <= 1 && generation > 65535 || number === 0 && type !== 0) {
+          this.note(id, "fail", offset, "Invalid generation or object-zero entry in cross-reference stream.");
+          return {
+            kind: "stream",
+            dict,
+            rows: null,
+            offset
+          };
+        }
+        rows.set(number, {
+          type,
+          offset: pointer,
+          generation,
+          location: offset
+        });
+      }
+    }
+    this.note(id, "pass", offset, "Cross-reference stream ranges and decoded row widths checked.");
+    return {
+      kind: "stream",
+      dict,
+      rows,
+      offset
+    };
+  }
+  async section(offset, id, streamOnly = false) {
+    const {
+      bytes
+    } = this;
+    if (hasToken(bytes, offset, "xref") && !streamOnly) {
+      this.note(id, "pass", offset, "Cross-reference pointer targets a table.");
+      return this.table(offset);
+    }
+    const header = objectHeader(bytes, offset);
+    const parsed = header && !header.limited && parseDictionary(bytes, header.end);
+    if ((parsed?.streamOffset ?? null) !== null && isName(parsed.dict.getRaw("Type"), "XRef")) {
+      this.note(id, "pass", offset, "Cross-reference pointer targets an XRef stream.");
+      return this.xrefStream(offset, parsed.dict, parsed.streamOffset);
+    }
+    this.note(id, header && !parsed ? "unknown" : "fail", offset, "Cross-reference pointer does not resolve to the expected table or XRef stream.");
+    return null;
+  }
+  inspectObjectOffsets(rows) {
+    const id = "PDF-XREF-ENTRY";
+    for (const [number, row] of rows) {
+      if (row.type !== 1) {
+        continue;
+      }
+      const header = objectHeader(this.bytes, row.offset);
+      if (header?.limited) {
+        this.note(id, "unknown", row.location, "Indirect object header exceeds the inspection limit.");
+        continue;
+      }
+      const valid = header?.number === number && header.generation === row.generation;
+      this.note(id, valid ? "pass" : "fail", row.location, valid ? "Uncompressed offsets point to matching indirect object headers." : `Entry ${number} ${row.generation} points to byte ${row.offset} without a matching indirect object header.`);
+    }
+  }
+  async readObjectStream(container, offset) {
+    const header = objectHeader(this.bytes, offset);
+    const parsed = header && !header.limited && parseDictionary(this.bytes, header.end);
+    if (!parsed || this.encrypted) {
+      return {
+        unknown: true
+      };
+    }
+    if (header.number !== container || header.generation !== 0 || !isName(parsed.dict.getRaw("Type"), "ObjStm") || parsed.streamOffset === null) {
+      return {};
+    }
+    const n = parsed.dict.getRaw("N");
+    const first = parsed.dict.getRaw("First");
+    if (n instanceof Ref || first instanceof Ref) {
+      return {
+        unknown: true
+      };
+    }
+    if (!Number.isSafeInteger(n) || n < 1 || !Number.isSafeInteger(first) || first < 1) {
+      return {};
+    }
+    if (n > MAX_ENTRIES) {
+      return {
+        unknown: true
+      };
+    }
+    const decoded = await this.decode(parsed.dict, parsed.streamOffset);
+    if (!decoded) {
+      return {
+        unknown: true
+      };
+    }
+    if (first >= decoded.length) {
+      return {};
+    }
+    try {
+      const lexer = new Lexer(new Stream(decoded.subarray(0, first)));
+      const numbers = [],
+        offsets = [];
+      const seen = new Set();
+      let previous = -1;
+      for (let i = 0; i < n; i++) {
+        const number = lexer.getObj(),
+          relative = lexer.getObj();
+        if (!Number.isSafeInteger(number) || number < 1 || seen.has(number) || !Number.isSafeInteger(relative) || relative <= previous || i === 0 && relative !== 0 || first + relative >= decoded.length || isWhite(decoded[first + relative]) || decoded[first + relative] === 37) {
+          return {};
+        }
+        seen.add(number);
+        numbers.push(number);
+        offsets.push(first + relative);
+        previous = relative;
+      }
+      if (lexer.getObj() !== EOF) {
+        return {};
+      }
+      for (let i = 0; i < offsets.length; i++) {
+        const body = decoded.subarray(offsets[i], offsets[i + 1]);
+        const parser = new Parser({
+          lexer: new Lexer(new Stream(body)),
+          xref: null
+        });
+        const object = parser.getObj();
+        if (object === EOF || object instanceof Cmd || parser.getObj() !== EOF) {
+          return {};
+        }
+      }
+      return {
+        numbers
+      };
+    } catch {
+      return {};
+    }
+  }
+  async inspectRows(revisions, chainComplete) {
+    const id = "PDF-OBJECT-STREAM",
+      latest = new Map(),
+      cache = new Map();
+    let effectiveComplete = chainComplete;
+    for (const revision of revisions.reverse()) {
+      const current = new Map();
+      if (revision.hasSupplement && !revision.supplement?.rows) {
+        effectiveComplete = false;
+      }
+      for (const section of [revision.supplement, revision.primary]) {
+        if (!section) {
+          continue;
+        }
+        if (!section.rows) {
+          effectiveComplete = false;
+          continue;
+        }
+        this.inspectObjectOffsets(section.rows);
+        for (const [number, row] of section.rows) {
+          current.set(number, row);
+        }
+      }
+      for (const [number, row] of current) {
+        latest.set(number, row);
+      }
+      const entries = revision === revisions.at(-1) ? latest : current;
+      for (const [number, row] of entries) {
+        if (row.type !== 2) {
+          continue;
+        }
+        if (!effectiveComplete && (!current.has(number) || !current.has(row.offset))) {
+          this.note(id, "unknown", row.location, "An unreadable revision may override the compressed entry or its stream.");
+          continue;
+        }
+        const container = latest.get(row.offset);
+        if (!container || container.type !== 1 || container.generation !== 0) {
+          this.note(id, effectiveComplete ? "fail" : "unknown", row.location, `Compressed entry ${number} has no usable generation-zero object stream.`);
+          continue;
+        }
+        const key = `${row.offset}@${container.offset}`;
+        if (!cache.has(key)) {
+          if (cache.size >= MAX_OBJECT_STREAMS) {
+            this.note(id, "unknown", row.location, "Object stream inspection limit exceeded.");
+            continue;
+          }
+          this.counts.objectStreams++;
+          cache.set(key, await this.readObjectStream(row.offset, container.offset));
+        }
+        const result = cache.get(key);
+        if (result.unknown) {
+          this.note(id, "unknown", container.offset, "Object stream could not be decoded within inspection limits.");
+        } else {
+          const valid = result.numbers?.[row.generation] === number;
+          this.note(id, valid ? "pass" : "fail", container.offset, valid ? "Compressed cross-reference entries match the object stream headers." : `Invalid object stream header or compressed entry ${number} does not match slot ${row.generation}.`);
+        }
+      }
+    }
+    if (!effectiveComplete) {
+      for (const rule of ["PDF-XREF-ENTRY", id]) {
+        this.note(rule, "unknown", null, "The complete cross-reference entry chain could not be inspected.");
+      }
+    }
+  }
+  async inspect(offset) {
+    const id = "PDF-XREF-PREV",
+      seen = new Set(),
+      revisions = [];
+    let complete = false;
+    while (seen.size < MAX_SECTIONS) {
+      seen.add(offset);
+      const primary = await this.section(offset, seen.size === 1 ? "PDF-XREF-TARGET" : id);
+      if (!primary) {
+        this.note(id, "unknown", offset, "The revision trailer could not be inspected.");
+        break;
+      }
+      this.counts.revisions++;
+      let supplement;
+      const hasSupplement = primary.kind === "table" && (primary.dict.getRaw("XRefStm") ?? null) !== null;
+      if (hasSupplement) {
+        const pointer = primary.dict.getRaw("XRefStm");
+        if (!Number.isSafeInteger(pointer) || pointer <= 0 || pointer >= offset) {
+          this.note(id, "fail", offset, "Invalid /XRefStm pointer for a hybrid revision.");
+        } else {
+          supplement = await this.section(pointer, id, true);
+        }
+      }
+      revisions.push({
+        primary,
+        supplement,
+        hasSupplement
+      });
+      if ((primary.dict.getRaw("Prev") ?? null) === null) {
+        this.note(id, "pass", offset, "Primary revision chain ends without another /Prev pointer.");
+        complete = true;
+        break;
+      }
+      const previous = primary.dict.getRaw("Prev");
+      if (!Number.isSafeInteger(previous) || previous <= 0 || previous >= offset || seen.has(previous)) {
+        this.note(id, "fail", offset, "Primary /Prev must point directly to an earlier cross-reference section.");
+        break;
+      }
+      offset = previous;
+    }
+    if (!complete) {
+      for (const rule of IDS) {
+        this.note(rule, "unknown", null, "The complete revision chain could not be inspected.");
+      }
+    }
+    await this.inspectRows(revisions, complete);
+  }
+}
+async function inspectPdfAXRef(stream, {
+  linearized,
+  encrypted
+}) {
+  const {
+    end
+  } = stream;
+  if (end > MAX_FILE_BYTES || linearized) {
+    const inspection = new PdfAXRefInspection(null, encrypted);
+    inspection.unknownAll(linearized ? "Linearized cross-reference layout is outside this inspection." : "File exceeds the cross-reference inspection size limit.");
+    return inspection.finish();
+  }
+  const bytes = stream.getByteRange(0, end);
+  const inspection = new PdfAXRefInspection(bytes, encrypted);
+  const tailStart = Math.max(0, bytes.length - 16_384);
+  const tail = bytesToString(bytes.subarray(tailStart));
+  const pointers = tail.matchAll(/[\r\n]startxref[ \t]*(?:\r\n|\r|\n)[ \t]*(\d+)[ \t]*(?:\r\n|\r|\n)%%EOF/g);
+  let offset = null;
+  let footerStart = null;
+  for (const match of pointers) {
+    offset = Number(match[1]);
+    footerStart = tailStart + match.index;
+  }
+  if (offset === null) {
+    inspection.unknownAll("No bounded startxref footer was found.");
+  } else if (!Number.isSafeInteger(offset) || offset <= 0 || offset >= footerStart) {
+    inspection.unknownAll("The declared startxref target is outside the document body.");
+    inspection.note("PDF-XREF-TARGET", "fail", null, "The declared startxref target is outside the document body.");
+  } else {
+    await inspection.inspect(offset);
+  }
+  return inspection.finish();
 }
 
 ;// ./src/core/pdfa_font_inspection.js
@@ -66045,7 +65401,7 @@ const EMBEDDED = "6.2.11.4.1-1";
 const GLYPH = "6.2.11.4.1-2";
 const NOTDEF = "6.2.11.8-1";
 const pdfa_font_inspection_RULES = [EMBEDDED, GLYPH, NOTDEF];
-const pdfa_font_inspection_UNKNOWN = Symbol("unknown");
+const UNKNOWN = Symbol("unknown");
 const pdfa_font_inspection_RANK = {
   "not-applicable": 0,
   pass: 1,
@@ -66056,10 +65412,10 @@ const pdfa_font_inspection_MAX_DEPTH = 32;
 const pdfa_font_inspection_MAX_VISITS = 8192;
 const MAX_OPERATORS = 200_000;
 const MAX_GLYPHS = 500_000;
-const pdfa_font_inspection_MAX_BYTES = 4 * 1024 * 1024;
-const pdfa_font_inspection_TOTAL_BYTES = 16 * 1024 * 1024;
+const MAX_BYTES = 4 * 1024 * 1024;
+const TOTAL_BYTES = 16 * 1024 * 1024;
 const FONT_KEYS = ["FontFile", "FontFile2", "FontFile3"];
-function pdfa_font_inspection_absent(value) {
+function absent(value) {
   return value === null || value === undefined;
 }
 function sfntSignature(bytes) {
@@ -66120,7 +65476,7 @@ class PdfAFontInspection {
     this.activeStreams = new Set();
     this.streams = new Map();
     this.fonts = new Map();
-    this.bytesRemaining = pdfa_font_inspection_TOTAL_BYTES;
+    this.bytesRemaining = TOTAL_BYTES;
     this.visits = 0;
     this.operators = 0;
     this.counts = {
@@ -66155,36 +65511,36 @@ class PdfAFontInspection {
   }
   resolve(raw) {
     if (!(raw instanceof Ref)) {
-      return raw === CIRCULAR_REF ? pdfa_font_inspection_UNKNOWN : raw;
+      return raw === CIRCULAR_REF ? UNKNOWN : raw;
     }
     try {
       const entry = this.xref.getEntry(raw.num);
       if (!entry || (entry.uncompressed ? entry.gen : 0) !== raw.gen) {
-        return pdfa_font_inspection_UNKNOWN;
+        return UNKNOWN;
       }
       const value = this.xref.fetch(raw);
-      return pdfa_font_inspection_absent(value) || value === CIRCULAR_REF ? pdfa_font_inspection_UNKNOWN : value;
+      return absent(value) || value === CIRCULAR_REF ? UNKNOWN : value;
     } catch (error) {
       if (error instanceof MissingDataException) {
         throw error;
       }
-      return pdfa_font_inspection_UNKNOWN;
+      return UNKNOWN;
     }
   }
   field(dict, key) {
     return this.resolve(dict.getRaw(key));
   }
   async bytes(stream) {
-    if (!(stream instanceof BaseStream) || !pdfa_font_inspection_absent(this.field(stream.dict, "F"))) {
+    if (!(stream instanceof BaseStream) || !absent(this.field(stream.dict, "F"))) {
       return null;
     }
     if (this.streams.has(stream)) {
       return this.streams.get(stream);
     }
     let result = null;
-    const limit = Math.min(pdfa_font_inspection_MAX_BYTES, this.bytesRemaining);
+    const limit = Math.min(MAX_BYTES, this.bytesRemaining);
     const source = stream instanceof FlateStream ? stream.stream : stream;
-    if (limit > 0 && source instanceof Stream && source.length <= pdfa_font_inspection_MAX_BYTES) {
+    if (limit > 0 && source instanceof Stream && source.length <= MAX_BYTES) {
       try {
         if (stream instanceof FlateStream) {
           if (typeof DecompressionStream === "function") {
@@ -66208,10 +65564,10 @@ class PdfAFontInspection {
   }
   fontResource(resources, group, name) {
     if (!(resources instanceof Dict) || !(name instanceof Name)) {
-      return pdfa_font_inspection_UNKNOWN;
+      return UNKNOWN;
     }
     const dictionary = this.field(resources, group);
-    return dictionary instanceof Dict ? this.field(dictionary, name.name) : pdfa_font_inspection_UNKNOWN;
+    return dictionary instanceof Dict ? this.field(dictionary, name.name) : UNKNOWN;
   }
   async page(raw, inherited, path, depth) {
     if (!this.take(path, depth)) {
@@ -66224,7 +65580,7 @@ class PdfAFontInspection {
     }
     this.pageNodes.add(node);
     const resourceEntry = node.getRaw("Resources");
-    const resources = pdfa_font_inspection_absent(resourceEntry) ? inherited : this.resolve(resourceEntry);
+    const resources = absent(resourceEntry) ? inherited : this.resolve(resourceEntry);
     const type = this.field(node, "Type");
     if (isName(type, "Pages")) {
       const kids = this.field(node, "Kids");
@@ -66248,16 +65604,16 @@ class PdfAFontInspection {
     this.counts.pages++;
     const pagePath = "/Page[" + this.counts.pages + "]";
     const annotations = this.field(node, "Annots");
-    if (!pdfa_font_inspection_absent(annotations)) {
+    if (!absent(annotations)) {
       if (!Array.isArray(annotations) || annotations.length > pdfa_font_inspection_MAX_VISITS || annotations.some(rawAnnotation => {
         const annotation = this.resolve(rawAnnotation);
-        return !(annotation instanceof Dict) || !pdfa_font_inspection_absent(annotation.getRaw("AP")) || isName(this.field(annotation, "Subtype"), "Widget") || isName(this.field(annotation, "Subtype"), "FreeText");
+        return !(annotation instanceof Dict) || !absent(annotation.getRaw("AP")) || isName(this.field(annotation, "Subtype"), "Widget") || isName(this.field(annotation, "Subtype"), "FreeText");
       })) {
         this.unknown(pagePath + "/Annots", "Fonts in annotation appearances are outside this inspection.");
       }
     }
     const contents = this.field(node, "Contents");
-    if (pdfa_font_inspection_absent(contents)) {
+    if (absent(contents)) {
       return;
     }
     const streams = Array.isArray(contents) ? contents : [contents];
@@ -66269,7 +65625,7 @@ class PdfAFontInspection {
     let length = 0;
     for (const stream of streams) {
       const part = await this.bytes(this.resolve(stream));
-      if (!part || length + part.length > pdfa_font_inspection_MAX_BYTES) {
+      if (!part || length + part.length > MAX_BYTES) {
         this.unknown(pagePath + "/Contents", "The complete page content could not be read.");
         return;
       }
@@ -66366,25 +65722,25 @@ class PdfAFontInspection {
             inText = op === "BT";
             break;
           case "Tf":
-            state.font = args[0] instanceof Name && Number.isFinite(args[1]) ? this.fontResource(resources, "Font", args[0]) : pdfa_font_inspection_UNKNOWN;
+            state.font = args[0] instanceof Name && Number.isFinite(args[1]) ? this.fontResource(resources, "Font", args[0]) : UNKNOWN;
             break;
           case "Tr":
-            state.mode = Number.isInteger(args[0]) && args[0] >= 0 && args[0] <= 7 ? args[0] : pdfa_font_inspection_UNKNOWN;
+            state.mode = Number.isInteger(args[0]) && args[0] >= 0 && args[0] <= 7 ? args[0] : UNKNOWN;
             break;
           case "gs":
             {
               const gs = this.fontResource(resources, "ExtGState", args[0]);
               if (!(gs instanceof Dict)) {
-                state.font = pdfa_font_inspection_UNKNOWN;
+                state.font = UNKNOWN;
                 this.unknown(path + "/gs", "An external graphics state may introduce an uninspected font or soft mask.");
                 break;
               }
               const selection = this.field(gs, "Font");
-              if (!pdfa_font_inspection_absent(selection)) {
-                state.font = Array.isArray(selection) && selection.length === 2 && Number.isFinite(selection[1]) ? this.resolve(selection[0]) : pdfa_font_inspection_UNKNOWN;
+              if (!absent(selection)) {
+                state.font = Array.isArray(selection) && selection.length === 2 && Number.isFinite(selection[1]) ? this.resolve(selection[0]) : UNKNOWN;
               }
               const mask = this.field(gs, "SMask");
-              if (!pdfa_font_inspection_absent(mask) && !isName(mask, "None")) {
+              if (!absent(mask) && !isName(mask, "None")) {
                 this.unknown(path + "/gs", "Font use in a soft mask is outside this inspection.");
               }
               break;
@@ -66393,9 +65749,9 @@ class PdfAFontInspection {
             {
               const xobject = this.fontResource(resources, "XObject", args[0]);
               const subtype = xobject instanceof BaseStream && this.field(xobject.dict, "Subtype");
-              if (isName(subtype, "Form") && pdfa_font_inspection_absent(xobject.dict.getRaw("Ref"))) {
+              if (isName(subtype, "Form") && absent(xobject.dict.getRaw("Ref"))) {
                 const entry = xobject.dict.getRaw("Resources");
-                const formResources = pdfa_font_inspection_absent(entry) ? state.pageResources : this.resolve(entry);
+                const formResources = absent(entry) ? state.pageResources : this.resolve(entry);
                 await this.nestedContent(xobject, formResources, state, path + "/Do", depth + 1);
               } else if (!isName(subtype, "Image")) {
                 this.unknown(path + "/Do", "An invoked XObject could not be inspected for font use.");
@@ -66444,7 +65800,7 @@ class PdfAFontInspection {
       return names;
     }
     const differences = this.field(value, "Differences");
-    if (pdfa_font_inspection_absent(differences)) {
+    if (absent(differences)) {
       return names;
     }
     if (!Array.isArray(differences) || differences.length > 1024) {
@@ -66467,16 +65823,16 @@ class PdfAFontInspection {
     const type = this.field(font, "Subtype");
     let target = font,
       identity = false,
-      cidMap = pdfa_font_inspection_UNKNOWN,
+      cidMap = UNKNOWN,
       names = null;
     if (isName(type, "Type0")) {
       const descendants = this.field(font, "DescendantFonts");
-      target = Array.isArray(descendants) && descendants.length === 1 ? this.resolve(descendants[0]) : pdfa_font_inspection_UNKNOWN;
+      target = Array.isArray(descendants) && descendants.length === 1 ? this.resolve(descendants[0]) : UNKNOWN;
       const encoding = this.field(font, "Encoding");
       identity = isName(encoding, "Identity-H") || isName(encoding, "Identity-V");
       if (identity && target instanceof Dict && isName(this.field(target, "Subtype"), "CIDFontType2")) {
         const map = this.field(target, "CIDToGIDMap");
-        if (pdfa_font_inspection_absent(map) || isName(map, "Identity")) {
+        if (absent(map) || isName(map, "Identity")) {
           cidMap = null;
         } else if (map instanceof BaseStream) {
           const bytes = await this.bytes(map);
@@ -66511,10 +65867,10 @@ class PdfAFontInspection {
     }
     const subtype = this.field(info.target, "Subtype");
     const descriptor = this.field(info.target, "FontDescriptor");
-    if (pdfa_font_inspection_absent(descriptor)) {
+    if (absent(descriptor)) {
       status = "fail";
     } else if (descriptor instanceof Dict) {
-      const sources = FONT_KEYS.filter(key => !pdfa_font_inspection_absent(descriptor.getRaw(key)));
+      const sources = FONT_KEYS.filter(key => !absent(descriptor.getRaw(key)));
       if (!sources.length) {
         status = "fail";
       } else if (sources.length === 1) {
@@ -66522,7 +65878,7 @@ class PdfAFontInspection {
         const stream = this.field(descriptor, key);
         if (stream instanceof BaseStream) {
           const external = this.field(stream.dict, "F");
-          if (external !== pdfa_font_inspection_UNKNOWN && !pdfa_font_inspection_absent(external)) {
+          if (external !== UNKNOWN && !absent(external)) {
             status = "fail";
           } else {
             const bytes = await this.bytes(stream);
@@ -66558,7 +65914,7 @@ class PdfAFontInspection {
               }
             }
           }
-        } else if (stream !== pdfa_font_inspection_UNKNOWN) {
+        } else if (stream !== UNKNOWN) {
           status = "fail";
         }
       }
@@ -66575,7 +65931,7 @@ class PdfAFontInspection {
     let gid = null;
     if (cidMap === null) {
       gid = code;
-    } else if (cidMap !== pdfa_font_inspection_UNKNOWN && code * 2 < cidMap.byteLength) {
+    } else if (cidMap !== UNKNOWN && code * 2 < cidMap.byteLength) {
       gid = cidMap.getUint16(code * 2);
     }
     if (gid === null) {
@@ -66596,13 +65952,13 @@ class PdfAFontInspection {
   async showType3(name, font, state, path, depth) {
     const procedures = this.field(font, "CharProcs");
     if (!(procedures instanceof Dict)) {
-      this.note(EMBEDDED, procedures === pdfa_font_inspection_UNKNOWN ? "unknown" : "fail", path, "The Type 3 font's glyph-procedure dictionary is missing or unreadable.");
+      this.note(EMBEDDED, procedures === UNKNOWN ? "unknown" : "fail", path, "The Type 3 font's glyph-procedure dictionary is missing or unreadable.");
       this.unknown(path, "No glyph procedure can be verified.", [GLYPH]);
       return;
     }
     this.note(EMBEDDED, "pass", path, "The Type 3 font uses PDF glyph procedures.");
-    const procedure = name ? this.field(procedures, name) : pdfa_font_inspection_UNKNOWN;
-    if (procedure === pdfa_font_inspection_UNKNOWN) {
+    const procedure = name ? this.field(procedures, name) : UNKNOWN;
+    if (procedure === UNKNOWN) {
       this.unknown(path, "The Type 3 glyph could not be resolved.", [GLYPH]);
       return;
     }
@@ -66617,7 +65973,7 @@ class PdfAFontInspection {
     }
     this.note(GLYPH, "pass", path, "The Type 3 font defines the named glyph in /CharProcs.");
     const entry = font.getRaw("Resources");
-    const glyphResources = pdfa_font_inspection_absent(entry) ? state.pageResources : this.resolve(entry);
+    const glyphResources = absent(entry) ? state.pageResources : this.resolve(entry);
     await this.nestedContent(procedure, glyphResources, state, path + "/CharProcs", depth + 1);
   }
   async show(strings, state, path, depth) {
@@ -66637,9 +65993,9 @@ class PdfAFontInspection {
     const info = this.fonts.get(font);
     const type3 = isName(info.type, "Type3");
     const composite = isName(info.type, "Type0");
-    const visible = mode !== 3 && mode !== pdfa_font_inspection_UNKNOWN;
+    const visible = mode !== 3 && mode !== UNKNOWN;
     let program = null;
-    if (mode === pdfa_font_inspection_UNKNOWN) {
+    if (mode === UNKNOWN) {
       this.unknown(path, "The text rendering mode could not be established.", [EMBEDDED, GLYPH]);
     } else if (visible && !type3) {
       program = await this.embedded(info);
@@ -66714,6 +66070,1244 @@ async function inspectPdfAFonts(xref, trusted) {
     inspection.unknown("/Root", "The document catalog could not be resolved.");
   }
   return inspection.finish();
+}
+
+;// ./node_modules/core-js/modules/esnext.array.group.js
+esnext_array_group_namespaceFn();
+
+;// ./src/core/pdfa_transparency_inspection.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const BLEND = "6.2.10-1";
+const PAGE = "6.2.10-2";
+const GROUP = "PDF-TRANSPARENCY-GROUP";
+const MASK = "PDF-SOFT-MASK";
+const pdfa_transparency_inspection_STATE = "PDF-TRANSPARENCY-STATE";
+const pdfa_transparency_inspection_RULES = [BLEND, PAGE, GROUP, MASK, pdfa_transparency_inspection_STATE];
+const pdfa_transparency_inspection_RANK = {
+  "not-applicable": 0,
+  pass: 1,
+  unknown: 2,
+  fail: 3
+};
+const BLEND_MODES = new Set(["Normal", "Compatible", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "ColorDodge", "ColorBurn", "HardLight", "SoftLight", "Difference", "Exclusion", "Hue", "Saturation", "Color", "Luminosity"]);
+const DEVICES = new Map([["DeviceGray", "DefaultGray"], ["DeviceRGB", "DefaultRGB"], ["DeviceCMYK", "DefaultCMYK"]]);
+const EXCLUDED_SPACES = new Set(["Lab", "Pattern", "Indexed", "Separation", "DeviceN"]);
+const pdfa_transparency_inspection_absent = value => value === undefined || value === null;
+class TransparencyInspection {
+  constructor(host, unknown) {
+    this.host = host;
+    this.unresolved = unknown;
+    this.findings = new Map();
+    this.groups = new Set();
+    this.states = new Set();
+    this.masks = new Set();
+    this.maskImages = new Set();
+    this.counts = {
+      transparentPages: 0,
+      groups: 0,
+      graphicsStates: 0,
+      softMasks: 0,
+      imageSoftMasks: 0
+    };
+  }
+  note(id, status, location, detail) {
+    if (pdfa_transparency_inspection_RANK[status] > (pdfa_transparency_inspection_RANK[this.findings.get(id)?.status] ?? -1)) {
+      this.findings.set(id, {
+        id,
+        status,
+        location,
+        detail
+      });
+    }
+  }
+  unknown(path, detail, includePage = false) {
+    for (const id of pdfa_transparency_inspection_RULES) {
+      if (includePage || id !== PAGE) {
+        this.note(id, "unknown", path, detail);
+      }
+    }
+  }
+  status(value, valid) {
+    if (value === this.unresolved) {
+      return "unknown";
+    }
+    return valid ? "pass" : "fail";
+  }
+  blend(value, path) {
+    const values = Array.isArray(value) ? value : [value];
+    if (values.length > 128) {
+      this.note(BLEND, "unknown", path, "The blend mode array exceeds the inspection limit.");
+      return this.unresolved;
+    }
+    let status = "pass";
+    let selected = false;
+    let found = false;
+    for (const raw of values) {
+      const mode = this.host.resolve(raw);
+      const valid = mode instanceof Name && BLEND_MODES.has(mode.name);
+      const entryStatus = this.status(mode, valid);
+      if (pdfa_transparency_inspection_RANK[entryStatus] > pdfa_transparency_inspection_RANK[status]) {
+        status = entryStatus;
+      }
+      if (!found && mode === this.unresolved) {
+        selected = this.unresolved;
+        found = true;
+      } else if (!found && valid) {
+        selected = !isName(mode, "Normal") && !isName(mode, "Compatible");
+        found = true;
+      }
+    }
+    this.note(BLEND, status, path, status === "pass" ? "The blend modes are defined in ISO 32000-1." : "The blend mode is outside ISO 32000-1 or could not be resolved.");
+    return selected;
+  }
+  async blendColor(raw, resources, path, depth = 0, remap = true) {
+    if (depth >= 16) {
+      return this.unresolved;
+    }
+    const space = this.host.resolve(raw);
+    const type = Array.isArray(space) ? space[0] : space;
+    if (!(type instanceof Name)) {
+      return space === this.unresolved ? this.unresolved : false;
+    }
+    if (EXCLUDED_SPACES.has(type.name)) {
+      return false;
+    }
+    if (space instanceof Name) {
+      const defaultName = DEVICES.get(space.name);
+      const replacement = this.host.resource(resources, "ColorSpace", defaultName ?? space.name);
+      if (!defaultName) {
+        return pdfa_transparency_inspection_absent(replacement) ? this.unresolved : this.blendColor(replacement, resources, path, depth + 1, remap);
+      }
+      if (remap && !pdfa_transparency_inspection_absent(replacement)) {
+        const result = await this.blendColor(replacement, resources, path, depth + 1, false);
+        if (result === this.unresolved) {
+          return result;
+        }
+        const components = result?.components ?? result?.device?.components;
+        return components === DEVICES_COMPONENTS[space.name] ? result : false;
+      }
+    } else if (isName(type, "ICCBased")) {
+      const profile = this.host.resolve(space[1]);
+      if (profile instanceof BaseStream) {
+        const header = await this.host.readProfile(profile);
+        if (header.space === "Lab ") {
+          return false;
+        }
+        const range = this.host.get(profile.dict, "Range");
+        const components = this.host.get(profile.dict, "N");
+        if (!pdfa_transparency_inspection_absent(range) && (!Array.isArray(range) || !Number.isInteger(components) || range.length !== 2 * components || range.length > 8 || !range.every((value, index) => this.host.resolve(value) === index % 2))) {
+          return this.unresolved;
+        }
+      }
+    } else if (!isName(type, "CalGray") && !isName(type, "CalRGB")) {
+      return this.unresolved;
+    }
+    return this.host.color(space, resources, path);
+  }
+  async group(owner, resources, path, kind = "form") {
+    path += "/Group";
+    const group = this.host.get(owner, "Group");
+    if (pdfa_transparency_inspection_absent(group)) {
+      return {
+        status: "absent",
+        hasColor: false
+      };
+    }
+    const unknown = this.unresolved;
+    if (!(group instanceof Dict)) {
+      const status = this.status(group, false);
+      this.note(GROUP, status, path, "The transparency group is not a readable dictionary.");
+      return {
+        status,
+        hasColor: status === "unknown" ? unknown : false
+      };
+    }
+    if (!this.groups.has(group)) {
+      this.groups.add(group);
+      this.counts.groups++;
+    }
+    const {
+      host
+    } = this;
+    const type = host.get(group, "Type");
+    const subtype = host.get(group, "S");
+    const isolation = host.get(group, "I");
+    const knockout = host.get(group, "K");
+    const space = host.get(group, "CS");
+    const fields = [[type, pdfa_transparency_inspection_absent(type) || isName(type, "Group"), "/Type"], [subtype, isName(subtype, "Transparency"), "/S"], [isolation, pdfa_transparency_inspection_absent(isolation) || typeof isolation === "boolean", "/I"], [knockout, pdfa_transparency_inspection_absent(knockout) || typeof knockout === "boolean", "/K"]];
+    let status = "pass";
+    for (const [value, valid, key] of fields) {
+      const fieldStatus = this.status(value, valid);
+      if (fieldStatus !== "pass") {
+        this.note(GROUP, fieldStatus, path + key, "The group dictionary contains an invalid or unresolved value.");
+      }
+      if (pdfa_transparency_inspection_RANK[fieldStatus] > pdfa_transparency_inspection_RANK[status]) {
+        status = fieldStatus;
+      }
+    }
+    let color = null;
+    if (!pdfa_transparency_inspection_absent(space)) {
+      color = await this.blendColor(space, resources, path + "/CS");
+      const csStatus = this.status(color, !!color);
+      if (csStatus !== "pass") {
+        this.note(GROUP, csStatus, path + "/CS", "The group's blending colour space is forbidden or could not be verified.");
+      }
+      if (pdfa_transparency_inspection_RANK[csStatus] > pdfa_transparency_inspection_RANK[status]) {
+        status = csStatus;
+      }
+      if (kind === "form" && (pdfa_transparency_inspection_absent(isolation) || isolation === false)) {
+        status = "fail";
+        this.note(GROUP, status, path + "/CS", "A Form transparency group with a parent may specify a blending colour space only when isolated.");
+      }
+    }
+    if (status === "pass") {
+      this.note(GROUP, status, path, "The transparency group fields were checked.");
+    }
+    return {
+      status,
+      color,
+      hasColor: status === "unknown" ? unknown : status === "pass" && !!color,
+      isolated: isolation === true
+    };
+  }
+  async graphicsState(dict, resources, path) {
+    if (!this.states.has(dict)) {
+      this.states.add(dict);
+      this.counts.graphicsStates++;
+    }
+    const {
+      host
+    } = this;
+    const delta = {};
+    const blend = host.get(dict, "BM");
+    if (!pdfa_transparency_inspection_absent(blend)) {
+      delta.blend = this.blend(blend, path + "/BM");
+    }
+    for (const [key, property] of [["ca", "fillAlpha"], ["CA", "strokeAlpha"]]) {
+      const alpha = host.get(dict, key);
+      if (pdfa_transparency_inspection_absent(alpha)) {
+        continue;
+      }
+      const status = this.status(alpha, Number.isFinite(alpha) && alpha >= 0 && alpha <= 1);
+      this.note(pdfa_transparency_inspection_STATE, status, path + "/" + key, status === "pass" ? "The alpha constant is in the range 0 to 1." : "The alpha constant must be a readable number from 0 to 1.");
+      delta[property] = status === "pass" ? alpha : this.unresolved;
+    }
+    for (const key of ["AIS", "TK"]) {
+      const flag = host.get(dict, key);
+      if (!pdfa_transparency_inspection_absent(flag)) {
+        const status = this.status(flag, typeof flag === "boolean");
+        this.note(pdfa_transparency_inspection_STATE, status, path + "/" + key, status === "pass" ? "The transparency flag is boolean." : "The transparency flag must be a readable boolean.");
+      }
+    }
+    const mask = host.get(dict, "SMask");
+    if (!pdfa_transparency_inspection_absent(mask)) {
+      delta.mask = await this.graphicsMask(mask, resources, path + "/SMask");
+    }
+    return delta;
+  }
+  async graphicsMask(mask, resources, path) {
+    const unknown = this.unresolved;
+    if (isName(mask, "None")) {
+      this.note(MASK, "pass", path, "The graphics state explicitly clears the soft mask.");
+      return false;
+    }
+    if (!(mask instanceof Dict)) {
+      this.note(MASK, this.status(mask, false), path, "The soft mask must be /None or a readable mask dictionary.");
+      return unknown;
+    }
+    if (!this.masks.has(mask)) {
+      this.masks.add(mask);
+      this.counts.softMasks++;
+    }
+    const {
+      host
+    } = this;
+    const type = host.get(mask, "Type");
+    const subtype = host.get(mask, "S");
+    const stream = host.get(mask, "G");
+    const formType = stream instanceof BaseStream ? host.get(stream.dict, "Subtype") : null;
+    const formResources = stream instanceof BaseStream ? host.get(stream.dict, "Resources") : null;
+    const formObjectType = stream instanceof BaseStream ? host.get(stream.dict, "Type") : null;
+    if ([type, subtype, stream, formType, formObjectType].includes(unknown)) {
+      this.note(MASK, "unknown", path, "The mask type or source Form could not be resolved.");
+      return unknown;
+    }
+    const luminosity = isName(subtype, "Luminosity");
+    if (!pdfa_transparency_inspection_absent(type) && !isName(type, "Mask") || !luminosity && !isName(subtype, "Alpha") || !(stream instanceof BaseStream) || !isName(formType, "Form") || !pdfa_transparency_inspection_absent(formObjectType) && !isName(formObjectType, "XObject")) {
+      this.note(MASK, "fail", path, "The soft mask requires /Alpha or /Luminosity and a source Form XObject.");
+      return unknown;
+    }
+    const group = await this.group(stream.dict, pdfa_transparency_inspection_absent(formResources) ? resources : formResources, path + "/G", luminosity ? "luminosity-mask" : "alpha-mask");
+    const descriptor = {
+      stream,
+      subtype: subtype.name
+    };
+    if (group.status === "unknown") {
+      this.note(MASK, "unknown", path + "/G", "The soft-mask transparency group could not be verified.");
+      return descriptor;
+    }
+    if (group.status !== "pass" || luminosity && !group.hasColor) {
+      this.note(MASK, "fail", path + "/G", "The source must be a transparency group with an explicit blending colour space for /Luminosity.");
+      return descriptor;
+    }
+    const backdrop = luminosity ? host.get(mask, "BC") : null;
+    const transfer = host.get(mask, "TR");
+    const count = group.color?.components ?? group.color?.device?.components;
+    const components = Array.isArray(backdrop) && backdrop.length <= 4 ? backdrop.map(item => host.resolve(item)) : null;
+    if (components?.includes(unknown) || backdrop === unknown || transfer === unknown) {
+      this.note(MASK, "unknown", path, "The mask backdrop or transfer function could not be resolved.");
+    } else if (!pdfa_transparency_inspection_absent(backdrop) && (components?.length !== count || !components?.every(value => Number.isFinite(value) && value >= 0 && value <= 1)) || !pdfa_transparency_inspection_absent(transfer) && !isName(transfer, "Identity") && !(transfer instanceof Dict) && !(transfer instanceof BaseStream)) {
+      this.note(MASK, "fail", path, "The mask backdrop or transfer function has an invalid shape.");
+    } else if (transfer instanceof Dict || transfer instanceof BaseStream) {
+      this.note(MASK, "unknown", path + "/TR", "Soft-mask transfer functions are outside this inspection.");
+    } else {
+      this.note(MASK, "pass", path, "The soft-mask subtype, source group and declared parameters were checked.");
+    }
+    return descriptor;
+  }
+  async image(dict, resources, path) {
+    const {
+      host
+    } = this;
+    const unknown = this.unresolved;
+    const mask = host.get(dict, "SMask");
+    const inData = host.get(dict, "SMaskInData");
+    let embedded = false;
+    if (!pdfa_transparency_inspection_absent(inData)) {
+      const modeStatus = this.status(inData, inData === 0 || inData === 1 || inData === 2);
+      if (modeStatus !== "pass") {
+        this.note(MASK, modeStatus, path + "/SMaskInData", "The embedded alpha mode must be 0, 1 or 2.");
+        embedded = unknown;
+      } else if (inData !== 0) {
+        const filter = host.get(dict, "Filter");
+        const filters = Array.isArray(filter) ? filter : [filter];
+        const resolved = filters.length <= 16 ? filters.map(value => host.resolve(value)) : null;
+        const jpx = resolved?.some(value => isName(value, "JPXDecode"));
+        if (jpx || !resolved || resolved.includes(unknown)) {
+          embedded = unknown;
+          if (jpx && !pdfa_transparency_inspection_absent(mask) && mask !== unknown) {
+            this.note(MASK, "fail", path + "/SMask", "JPX embedded alpha and a separate image soft mask are mutually exclusive.");
+          } else {
+            this.note(MASK, "unknown", path + "/SMaskInData", "Encoded alpha samples or the image filter could not be verified.");
+          }
+        }
+      } else {
+        this.note(MASK, "pass", path + "/SMaskInData", "Encoded alpha samples are explicitly ignored.");
+      }
+    }
+    if (pdfa_transparency_inspection_absent(mask)) {
+      return embedded;
+    }
+    path += "/SMask";
+    if (!(mask instanceof BaseStream)) {
+      this.note(MASK, this.status(mask, false), path, "An image soft mask must be a readable Image XObject stream.");
+      return unknown;
+    }
+    if (!this.maskImages.has(mask)) {
+      this.maskImages.add(mask);
+      this.counts.imageSoftMasks++;
+    }
+    const m = mask.dict;
+    const type = host.get(m, "Type");
+    const subtype = host.get(m, "Subtype");
+    const imageMask = host.get(m, "ImageMask");
+    const nestedMask = host.get(m, "Mask");
+    const nestedSoft = host.get(m, "SMask");
+    const nestedInData = host.get(m, "SMaskInData");
+    const color = host.get(m, "ColorSpace");
+    const bits = host.get(m, "BitsPerComponent");
+    const width = host.get(m, "Width");
+    const height = host.get(m, "Height");
+    const external = host.get(m, "F");
+    const fields = [[type, pdfa_transparency_inspection_absent(type) || isName(type, "XObject"), "/Type"], [subtype, isName(subtype, "Image"), "/Subtype"], [imageMask, pdfa_transparency_inspection_absent(imageMask) || imageMask === false, "/ImageMask"], [nestedMask, pdfa_transparency_inspection_absent(nestedMask), "/Mask"], [nestedSoft, pdfa_transparency_inspection_absent(nestedSoft), "/SMask"], [nestedInData, pdfa_transparency_inspection_absent(nestedInData) || nestedInData === 0, "/SMaskInData"], [color, isName(color, "DeviceGray"), "/ColorSpace"], [bits, [1, 2, 4, 8, 16].includes(bits), "/BitsPerComponent"], [width, Number.isSafeInteger(width) && width > 0, "/Width"], [height, Number.isSafeInteger(height) && height > 0, "/Height"], [external, pdfa_transparency_inspection_absent(external), "/F"]];
+    for (const [value, valid, key] of fields) {
+      const status = this.status(value, valid);
+      this.note(MASK, status, path + key, status === "pass" ? "The image soft-mask dictionary fields were checked." : "The image soft-mask field is invalid or could not be resolved.");
+    }
+    const matte = host.get(m, "Matte");
+    if (!pdfa_transparency_inspection_absent(matte)) {
+      const parentColor = await host.color(host.get(dict, "ColorSpace"), resources, path);
+      const parentWidth = host.get(dict, "Width");
+      const parentHeight = host.get(dict, "Height");
+      const count = parentColor?.components ?? parentColor?.device?.components;
+      const values = Array.isArray(matte) && matte.length <= 4 ? matte.map(value => host.resolve(value)) : null;
+      if (!count || values?.includes(unknown) || [matte, parentWidth, parentHeight, width, height].includes(unknown)) {
+        this.note(MASK, "unknown", path + "/Matte", "The matte dimensions or component count could not be established.");
+      } else {
+        const valid = values?.length === count && values.every(Number.isFinite) && width === parentWidth && height === parentHeight;
+        this.note(MASK, valid ? "pass" : "fail", path + "/Matte", "The matte must match the image dimensions and colour components.");
+      }
+    }
+    return true;
+  }
+  page(group, usesTransparency, output, path) {
+    if (usesTransparency === false) {
+      return;
+    }
+    if (usesTransparency === true) {
+      this.counts.transparentPages++;
+    }
+    if (typeof output === "string" || group.hasColor === true) {
+      this.note(PAGE, "pass", path, "A PDF/A output profile or an explicit page blending colour space is available.");
+    } else if ([usesTransparency, output, group.hasColor].includes(this.unresolved)) {
+      this.note(PAGE, "unknown", path, "Page transparency or its blending colour space could not be fully established.");
+    } else {
+      this.note(PAGE, "fail", path, "The page uses transparency without a PDF/A output intent or a group with a blending colour space.");
+    }
+  }
+  finish() {
+    return {
+      checks: pdfa_transparency_inspection_RULES.map(id => this.findings.get(id) ?? {
+        id,
+        status: "not-applicable",
+        location: "",
+        detail: "No applicable transparency evidence in the inspected scope."
+      }),
+      counts: this.counts
+    };
+  }
+}
+const DEVICES_COMPONENTS = {
+  DeviceGray: 1,
+  DeviceRGB: 3,
+  DeviceCMYK: 4
+};
+
+;// ./src/core/pdfa_color_inspection.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const INTENT = "PDF-OUTPUT-INTENT",
+  ICC = "PDF-ICC-STRUCTURE";
+const OUTPUT = "6.2.3-1",
+  pdfa_color_inspection_SHARED = "6.2.3-2",
+  EXTERNAL = "6.2.3-3";
+const INPUT = "6.2.4.2-1";
+const pdfa_color_inspection_DEVICES = new Map([["DeviceRGB", {
+  id: "6.2.4.3-2",
+  signature: "RGB ",
+  components: 3,
+  substitute: "DefaultRGB"
+}], ["DeviceCMYK", {
+  id: "6.2.4.3-3",
+  signature: "CMYK",
+  components: 4,
+  substitute: "DefaultCMYK"
+}], ["DeviceGray", {
+  id: "6.2.4.3-4",
+  signature: "GRAY",
+  components: 1,
+  substitute: "DefaultGray"
+}]]);
+const PAINT = [ICC, INPUT, ...Array.from(pdfa_color_inspection_DEVICES.values(), device => device.id)];
+const pdfa_color_inspection_RULES = [INTENT, OUTPUT, pdfa_color_inspection_SHARED, EXTERNAL, ...PAINT];
+const pdfa_color_inspection_UNKNOWN = Symbol("unknown");
+const OPAQUE = {
+  blend: false,
+  fillAlpha: 1,
+  strokeAlpha: 1,
+  mask: false
+};
+const pdfa_color_inspection_RANK = {
+  "not-applicable": 0,
+  pass: 1,
+  unknown: 2,
+  fail: 3
+};
+const pdfa_color_inspection_MAX_DEPTH = 32,
+  MAX_ITEMS = 8192,
+  MAX_OPS = 200000;
+const pdfa_color_inspection_MAX_BYTES = 4 * 1024 * 1024,
+  pdfa_color_inspection_TOTAL_BYTES = 16 * 1024 * 1024;
+const CHANNELS = new Map([["GRAY", 1], ["RGB ", 3], ["CMYK", 4], ["Lab ", 3]]);
+const INPUT_CLASSES = new Set(["prtr", "mntr", "scnr", "spac"]);
+const SHORTCUTS = {
+  g: "DeviceGray",
+  G: "DeviceGray",
+  rg: "DeviceRGB",
+  RG: "DeviceRGB",
+  k: "DeviceCMYK",
+  K: "DeviceCMYK"
+};
+const FILL = new Set(["f", "F", "f*", "B", "B*", "b", "b*"]);
+const STROKE = new Set(["S", "s", "B", "B*", "b", "b*"]);
+const TEXT = new Set(["Tj", "TJ", "'", '"']);
+const pdfa_color_inspection_absent = value => value === null || value === undefined;
+const pdfa_color_inspection_at = (path, key) => path + "/" + key;
+function profileHeader(bytes) {
+  if (!bytes) {
+    return {
+      status: "unknown"
+    };
+  }
+  if (bytes.length < 132) {
+    return {
+      status: "fail"
+    };
+  }
+  const word = offset => String.fromCharCode(...bytes.subarray(offset, offset + 4));
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const size = view.getUint32(0),
+    count = view.getUint32(128);
+  const dataStart = 132 + 12 * count;
+  if (word(36) !== "acsp" || !count || size < dataStart || size > bytes.length) {
+    return {
+      status: "fail"
+    };
+  }
+  if (count > 4096 || size < bytes.length) {
+    return {
+      status: "unknown"
+    };
+  }
+  for (let i = 0; i < count; i++) {
+    const offset = view.getUint32(136 + 12 * i),
+      length = view.getUint32(140 + 12 * i);
+    if (offset < dataStart || offset % 4 || length < 8 || offset + length > size) {
+      return {
+        status: "fail"
+      };
+    }
+  }
+  return {
+    status: "pass",
+    deviceClass: word(12),
+    space: word(16),
+    major: bytes[8]
+  };
+}
+class ColorInspection {
+  constructor(xref) {
+    this.xref = xref;
+    this.results = new Map();
+    this.counts = {
+      pages: 0,
+      streams: 0,
+      outputIntents: 0,
+      iccProfiles: 0,
+      deviceUses: 0
+    };
+    this.byteBudget = pdfa_color_inspection_TOTAL_BYTES;
+    this.items = MAX_ITEMS;
+    this.ops = MAX_OPS;
+    this.bytesCache = new Map();
+    this.profiles = new Map();
+    this.pageNodes = new Set();
+    this.resourceNodes = new Set();
+    this.forms = new Set();
+    this.output = null;
+    this.pageUse = null;
+    this.transparency = new TransparencyInspection(this, pdfa_color_inspection_UNKNOWN);
+  }
+  note(id, status, location, detail) {
+    if (pdfa_color_inspection_RANK[status] > (pdfa_color_inspection_RANK[this.results.get(id)?.status] ?? -1)) {
+      this.results.set(id, {
+        id,
+        status,
+        location,
+        detail
+      });
+    }
+  }
+  check(id, condition, path, failure) {
+    this.note(id, condition ? "pass" : "fail", path, condition ? "Checked the supported condition." : failure);
+  }
+  unknown(path, detail, ids = PAINT) {
+    for (const id of ids) {
+      this.note(id, "unknown", path, detail);
+    }
+  }
+  useTransparency(evidence) {
+    if (this.pageUse && this.pageUse.transparent !== true && evidence !== false) {
+      this.pageUse.transparent = evidence;
+    }
+  }
+  unavailable(path, detail) {
+    this.unknown(path, detail);
+    this.transparency.unknown(path, detail, !this.pageUse);
+    this.useTransparency(pdfa_color_inspection_UNKNOWN);
+  }
+  take(path, depth) {
+    if (depth <= pdfa_color_inspection_MAX_DEPTH && this.items-- > 0) {
+      return true;
+    }
+    this.unknown(path, "The color inspection reached its traversal limit.");
+    return false;
+  }
+  resolve(value) {
+    if (!(value instanceof Ref)) {
+      return value === CIRCULAR_REF ? pdfa_color_inspection_UNKNOWN : value;
+    }
+    try {
+      const entry = this.xref.getEntry(value.num);
+      if (!entry || (entry.uncompressed ? entry.gen : 0) !== value.gen) {
+        return pdfa_color_inspection_UNKNOWN;
+      }
+      const resolved = this.xref.fetch(value);
+      return pdfa_color_inspection_absent(resolved) || resolved === CIRCULAR_REF ? pdfa_color_inspection_UNKNOWN : resolved;
+    } catch (error) {
+      if (error instanceof MissingDataException) {
+        throw error;
+      }
+      return pdfa_color_inspection_UNKNOWN;
+    }
+  }
+  get(dict, key) {
+    return this.resolve(dict?.getRaw(key));
+  }
+  async bytes(stream) {
+    if (!(stream instanceof BaseStream) || !pdfa_color_inspection_absent(this.get(stream.dict, "F"))) {
+      return null;
+    }
+    if (this.bytesCache.has(stream)) {
+      return this.bytesCache.get(stream);
+    }
+    let bytes = null;
+    const source = stream instanceof FlateStream ? stream.stream : stream;
+    const limit = Math.min(pdfa_color_inspection_MAX_BYTES, this.byteBudget);
+    if (limit > 0 && source instanceof Stream && source.length <= pdfa_color_inspection_MAX_BYTES) {
+      try {
+        if (stream instanceof FlateStream) {
+          if (typeof DecompressionStream === "function") {
+            bytes = await readFlate(source.getByteRange(source.start, source.end), limit);
+          }
+        } else if (source.length <= limit) {
+          bytes = source.getByteRange(source.start, source.end);
+        }
+      } catch (error) {
+        if (error instanceof MissingDataException) {
+          throw error;
+        }
+      }
+    }
+    this.bytesCache.set(stream, bytes);
+    if (bytes) {
+      this.byteBudget -= bytes.length;
+      this.counts.streams++;
+    }
+    return bytes;
+  }
+  async readProfile(stream) {
+    if (!this.profiles.has(stream)) {
+      this.counts.iccProfiles++;
+      const external = this.get(stream.dict, "F");
+      this.profiles.set(stream, external !== pdfa_color_inspection_UNKNOWN && !pdfa_color_inspection_absent(external) ? {
+        status: "fail"
+      } : profileHeader(await this.bytes(stream)));
+    }
+    return this.profiles.get(stream);
+  }
+  async profile(stream, path, use) {
+    const id = use === "output" ? OUTPUT : INPUT;
+    if (!(stream instanceof BaseStream)) {
+      const status = stream === pdfa_color_inspection_UNKNOWN ? "unknown" : "fail";
+      this.note(ICC, status, path, "The ICC profile is not a readable embedded stream.");
+      this.note(id, status, path, "No embedded ICC profile stream could be verified.");
+      return null;
+    }
+    const profile = await this.readProfile(stream);
+    this.note(ICC, profile.status, path, {
+      pass: "ICC signature, profile size and tag extents were checked.",
+      fail: "The ICC stream is external or its signature, size or tag extents are invalid.",
+      unknown: "ICC profile bytes could not be fully inspected."
+    }[profile.status]);
+    if (profile.status !== "pass") {
+      this.note(id, profile.status, path, "The original ICC profile header could not be verified.");
+      return null;
+    }
+    const output = use === "output";
+    const allowedClass = output ? ["prtr", "mntr"].includes(profile.deviceClass) : INPUT_CLASSES.has(profile.deviceClass);
+    const allowedSpace = CHANNELS.has(profile.space) && (!output || profile.space !== "Lab ");
+    const allowed = allowedClass && allowedSpace && profile.major >= 2 && profile.major < 5;
+    this.check(id, allowed, path, "ICC profile class, data color space or version is outside the supported PDF/A-3 range.");
+    return allowed ? profile : null;
+  }
+  async intents(catalog) {
+    const path = "/Root/OutputIntents";
+    const intents = this.get(catalog, "OutputIntents");
+    if (pdfa_color_inspection_absent(intents)) {
+      return;
+    }
+    if (!Array.isArray(intents) || intents.length > 128) {
+      this.note(INTENT, intents === pdfa_color_inspection_UNKNOWN || Array.isArray(intents) ? "unknown" : "fail", path, "The output intents entry is not a readable array of supported size.");
+      this.output = pdfa_color_inspection_UNKNOWN;
+      return;
+    }
+    let common,
+      unresolved = false;
+    for (let i = 0; i < intents.length; i++) {
+      const location = path + "[" + i + "]";
+      const intent = this.resolve(intents[i]);
+      if (!(intent instanceof Dict)) {
+        this.note(INTENT, intent === pdfa_color_inspection_UNKNOWN ? "unknown" : "fail", location, "Output intent is not a readable dictionary.");
+        unresolved = true;
+        continue;
+      }
+      this.counts.outputIntents++;
+      const type = this.get(intent, "Type"),
+        sub = this.get(intent, "S");
+      const condition = this.get(intent, "OutputConditionIdentifier");
+      const fieldsValid = (pdfa_color_inspection_absent(type) || isName(type, "OutputIntent")) && sub instanceof Name && typeof condition === "string";
+      if ([type, sub, condition].includes(pdfa_color_inspection_UNKNOWN)) {
+        this.note(INTENT, "unknown", location, "Output intent fields could not be resolved.");
+      } else {
+        this.check(INTENT, fieldsValid, location, "The output intent has an invalid type, subtype or output condition identifier.");
+      }
+      if (sub === pdfa_color_inspection_UNKNOWN) {
+        unresolved = true;
+        this.note(EXTERNAL, "unknown", location, "The output intent subtype is unreadable.");
+      } else if (isName(sub, "GTS_PDFX")) {
+        this.check(EXTERNAL, pdfa_color_inspection_absent(intent.getRaw("DestOutputProfileRef")), location, "PDF/X output intent contains an external destination profile reference.");
+      }
+      const raw = intent.getRaw("DestOutputProfile");
+      if (!pdfa_color_inspection_absent(raw) && intents.length > 1) {
+        const stream = this.resolve(raw);
+        const same = raw instanceof Ref && (!common || raw.num === common.num && raw.gen === common.gen);
+        if (same && stream instanceof BaseStream) {
+          const profile = await this.readProfile(stream);
+          this.note(pdfa_color_inspection_SHARED, profile.status, location, profile.status === "pass" ? "The shared ICC stream identity, header and tag extents were checked." : "The shared destination profile must be an embedded ICC stream with a readable header and tag table.");
+        } else if (same && stream === pdfa_color_inspection_UNKNOWN) {
+          this.note(pdfa_color_inspection_SHARED, "unknown", location, "The shared destination profile could not be resolved.");
+        } else {
+          this.note(pdfa_color_inspection_SHARED, "fail", location, "Destination profiles must be the same indirect stream object.");
+        }
+        common ||= raw;
+      }
+      if (!isName(sub, "GTS_PDFA1")) {
+        continue;
+      }
+      const stream = this.resolve(raw);
+      const profilePath = pdfa_color_inspection_at(location, "DestOutputProfile");
+      const external = stream instanceof BaseStream ? this.get(stream.dict, "F") : null;
+      if (stream === pdfa_color_inspection_UNKNOWN || external === pdfa_color_inspection_UNKNOWN) {
+        this.note(INTENT, "unknown", profilePath, "The destination ICC stream could not be resolved.");
+      } else {
+        this.check(INTENT, stream instanceof BaseStream && pdfa_color_inspection_absent(external), profilePath, "PDF/A output intent lacks an embedded destination ICC stream.");
+      }
+      const info = await this.profile(stream, profilePath, "output");
+      if (!fieldsValid || !info || this.output && this.output !== info.space) {
+        unresolved = true;
+      } else {
+        this.output = info.space;
+      }
+    }
+    if (unresolved) {
+      this.output = pdfa_color_inspection_UNKNOWN;
+      if (intents.length > 1) {
+        this.note(pdfa_color_inspection_SHARED, "unknown", path, "A complete shared-profile comparison could not be made.");
+      }
+    }
+  }
+  resource(resources, group, name) {
+    const dict = resources instanceof Dict ? this.get(resources, group) : resources;
+    if (dict instanceof Dict) {
+      return this.get(dict, name);
+    }
+    return pdfa_color_inspection_absent(dict) ? undefined : pdfa_color_inspection_UNKNOWN;
+  }
+  async color(raw, resources, path, depth = 0) {
+    if (depth > pdfa_color_inspection_MAX_DEPTH) {
+      return pdfa_color_inspection_UNKNOWN;
+    }
+    const space = this.resolve(raw);
+    if (space instanceof Name) {
+      if (pdfa_color_inspection_DEVICES.has(space.name)) {
+        return {
+          device: pdfa_color_inspection_DEVICES.get(space.name),
+          resources
+        };
+      }
+      if (space.name === "Pattern") {
+        return {
+          pattern: true
+        };
+      }
+      const next = this.resource(resources, "ColorSpace", space.name);
+      return pdfa_color_inspection_absent(next) ? pdfa_color_inspection_UNKNOWN : this.color(next, resources, path, depth + 1);
+    }
+    if (!Array.isArray(space) || !(space[0] instanceof Name)) {
+      return pdfa_color_inspection_UNKNOWN;
+    }
+    const type = space[0].name;
+    if (type === "Pattern") {
+      return {
+        pattern: true
+      };
+    }
+    if (type === "ICCBased") {
+      const stream = this.resolve(space[1]);
+      const info = await this.profile(stream, path, "input");
+      if (!info) {
+        return pdfa_color_inspection_UNKNOWN;
+      }
+      const n = this.get(stream.dict, "N");
+      if (n === pdfa_color_inspection_UNKNOWN) {
+        this.note(ICC, "unknown", pdfa_color_inspection_at(path, "N"), "The ICCBased component count is unreadable.");
+        return pdfa_color_inspection_UNKNOWN;
+      }
+      this.check(ICC, n === CHANNELS.get(info.space), pdfa_color_inspection_at(path, "N"), "ICCBased /N does not match the profile's data color space.");
+      return n === CHANNELS.get(info.space) ? {
+        components: n
+      } : pdfa_color_inspection_UNKNOWN;
+    }
+    if (type === "Indexed") {
+      const base = await this.color(space[1], resources, pdfa_color_inspection_at(path, "Base"), depth + 1);
+      return base === pdfa_color_inspection_UNKNOWN ? pdfa_color_inspection_UNKNOWN : {
+        ...base,
+        forbiddenDefault: true
+      };
+    }
+    if (["CalGray", "CalRGB", "Lab"].includes(type)) {
+      const params = this.resolve(space[1]);
+      const white = params instanceof Dict ? this.get(params, "WhitePoint") : null;
+      if (Array.isArray(white) && white.length === 3 && white.every(Number.isFinite) && white[0] > 0 && white[1] === 1 && white[2] > 0) {
+        return {
+          components: type === "CalGray" ? 1 : 3,
+          forbiddenDefault: type === "Lab"
+        };
+      }
+    }
+    return pdfa_color_inspection_UNKNOWN;
+  }
+  async resources(resources, path) {
+    if (!(resources instanceof Dict) || this.resourceNodes.has(resources)) {
+      return;
+    }
+    this.resourceNodes.add(resources);
+    const spaces = this.get(resources, "ColorSpace");
+    if (spaces === pdfa_color_inspection_UNKNOWN) {
+      this.unknown(path, "The color space resource dictionary could not be resolved.");
+    } else if (spaces instanceof Dict) {
+      let index = 0;
+      for (const value of spaces.getRawValues()) {
+        if (!this.take(path, 0)) {
+          break;
+        }
+        await this.color(value, resources, path + "[" + index++ + "]");
+      }
+    }
+  }
+  async paint(space, path) {
+    if (space?.pattern) {
+      this.unavailable(path, "Pattern content is outside this inspection.");
+      return;
+    }
+    if (space === pdfa_color_inspection_UNKNOWN || !space) {
+      this.unknown(path, "The color space used for painting could not be resolved.");
+      return;
+    }
+    if (!space.device) {
+      return;
+    }
+    this.counts.deviceUses++;
+    const {
+      device,
+      resources
+    } = space;
+    const raw = this.resource(resources, "ColorSpace", device.substitute);
+    const alternative = pdfa_color_inspection_absent(raw) ? null : await this.color(raw, resources, pdfa_color_inspection_at(path, device.substitute));
+    const hasDefault = !alternative?.forbiddenDefault && alternative?.components === device.components;
+    const hasOutput = typeof this.output === "string" && (device.signature === "GRAY" || this.output === device.signature);
+    if (hasDefault || hasOutput) {
+      this.check(device.id, true, path);
+    } else if (alternative === pdfa_color_inspection_UNKNOWN || this.output === pdfa_color_inspection_UNKNOWN) {
+      this.note(device.id, "unknown", path, "A possible default color space or output profile could not be verified.");
+    } else {
+      this.note(device.id, "fail", path, "Painting uses an uncalibrated device color without a suitable default or PDF/A output profile.");
+    }
+  }
+  async composite(state, kind, path, depth, ownMask = false) {
+    const alpha = state[kind === "fill" ? "fillAlpha" : "strokeAlpha"];
+    const mask = ownMask ? false : state.mask;
+    const activeMask = !!mask && mask !== pdfa_color_inspection_UNKNOWN;
+    if (state.blend === true || typeof alpha === "number" && alpha < 1 || activeMask) {
+      this.useTransparency(true);
+    } else if (state.blend === pdfa_color_inspection_UNKNOWN || alpha === pdfa_color_inspection_UNKNOWN || mask === pdfa_color_inspection_UNKNOWN) {
+      this.useTransparency(pdfa_color_inspection_UNKNOWN);
+    }
+    if (!activeMask) {
+      return;
+    }
+    if (this.forms.has(mask.stream)) {
+      this.unavailable(path, "A soft-mask Form has a cyclic reference.");
+      return;
+    }
+    if (!this.pageUse.masks.has(mask)) {
+      this.pageUse.masks.add(mask);
+      await this.xobject(mask.stream, mask.sourceState.pageResources, mask.sourceState, pdfa_color_inspection_at(path, "SMask"), depth + 1);
+    }
+  }
+  async paintObject(state, kind, path, depth) {
+    await this.composite(state, kind, path, depth);
+    if (!state.ignoreColors || state[kind]?.pattern) {
+      await this.paint(state[kind], path);
+    }
+  }
+  async xobject(raw, resources, state, path, depth) {
+    const obj = this.resolve(raw);
+    if (!(obj instanceof BaseStream)) {
+      this.unavailable(path, "The invoked XObject could not be inspected.");
+      return;
+    }
+    const type = this.get(obj.dict, "Subtype");
+    if (isName(type, "Image")) {
+      const mask = this.get(obj.dict, "ImageMask");
+      const ownMask = await this.transparency.image(obj.dict, resources, path);
+      const hardMask = this.get(obj.dict, "Mask");
+      this.useTransparency(ownMask);
+      if (hardMask === pdfa_color_inspection_UNKNOWN) {
+        this.useTransparency(pdfa_color_inspection_UNKNOWN);
+      }
+      const overrides = ownMask !== false || hardMask === pdfa_color_inspection_UNKNOWN || hardMask instanceof BaseStream || Array.isArray(hardMask);
+      await this.composite(state, "fill", path, depth, overrides);
+      if (mask === pdfa_color_inspection_UNKNOWN) {
+        this.unknown(path, "The image stencil setting could not be read.");
+      } else if (mask === true && (!state.ignoreColors || state.fill?.pattern)) {
+        await this.paint(state.fill, path);
+      } else if (mask !== true && !state.ignoreColors) {
+        await this.paint(await this.color(this.get(obj.dict, "ColorSpace"), resources, path), path);
+      }
+      return;
+    }
+    if (!isName(type, "Form") || !pdfa_color_inspection_absent(this.get(obj.dict, "Ref")) || this.forms.has(obj) || !this.take(path, depth)) {
+      this.unavailable(path, "The invoked Form is cyclic, external or unsupported.");
+      return;
+    }
+    const entry = this.get(obj.dict, "Resources");
+    const local = pdfa_color_inspection_absent(entry) ? state.pageResources : entry;
+    await this.resources(local, pdfa_color_inspection_at(path, "Resources"));
+    this.forms.add(obj);
+    try {
+      let kind = "form";
+      if (state.maskSubtype === "Alpha") {
+        kind = "alpha-mask";
+      } else if (state.maskSubtype === "Luminosity") {
+        kind = "luminosity-mask";
+      }
+      const group = await this.transparency.group(obj.dict, local, path, kind);
+      const child = {
+        ...state,
+        maskSubtype: null
+      };
+      if (group.status !== "absent") {
+        this.useTransparency(group.status === "pass" ? true : pdfa_color_inspection_UNKNOWN);
+        await this.composite(state, "fill", path, depth);
+        Object.assign(child, OPAQUE);
+        if (group.hasColor === true && !state.ignoreColors) {
+          await this.paint(group.color, pdfa_color_inspection_at(path, "Group/CS"));
+        }
+      }
+      const bytes = await this.bytes(obj);
+      if (bytes) {
+        await this.content(bytes, local, child, path, depth);
+      } else {
+        this.unavailable(path, "Form content could not be read.");
+      }
+    } finally {
+      this.forms.delete(obj);
+    }
+  }
+  async content(bytes, resources, state, path, depth) {
+    if (!bytes.length) {
+      return;
+    }
+    const stack = [],
+      args = [];
+    let inText = false,
+      hasPath = false;
+    try {
+      const parser = new Parser({
+        lexer: new Lexer(new Stream(bytes)),
+        xref: null
+      });
+      while (parser.buf1 !== EOF) {
+        if (this.ops-- <= 0 || parser.buf1 instanceof Cmd && parser.buf1.cmd === "BI") {
+          this.unavailable(path, "Inline images or the operation limit prevent complete inspection.");
+          return;
+        }
+        const token = parser.getObj();
+        if (!(token instanceof Cmd)) {
+          if (token instanceof Ref || args.length > 32) {
+            throw new Error("Invalid operands");
+          }
+          args.push(token);
+          continue;
+        }
+        const op = token.cmd,
+          location = pdfa_color_inspection_at(path, op);
+        const definition = EvaluatorPreprocessor.opMap[op];
+        if (!definition || (definition.variableArgs ? args.length > definition.numArgs : args.length !== definition.numArgs)) {
+          throw new Error("Invalid operator");
+        }
+        if (op === "q") {
+          if (stack.length >= pdfa_color_inspection_MAX_DEPTH) {
+            throw new Error("Graphics stack limit");
+          }
+          stack.push({
+            ...state
+          });
+        } else if (op === "Q") {
+          if (!stack.length) {
+            throw new Error("Unmatched graphics restore");
+          }
+          state = stack.pop();
+        } else if (Object.hasOwn(SHORTCUTS, op)) {
+          const kind = op === op.toUpperCase() ? "stroke" : "fill";
+          state[kind] = args.every(Number.isFinite) ? {
+            device: pdfa_color_inspection_DEVICES.get(SHORTCUTS[op]),
+            resources
+          } : pdfa_color_inspection_UNKNOWN;
+        } else if (op === "cs" || op === "CS") {
+          state[op === "cs" ? "fill" : "stroke"] = await this.color(args[0], resources, location);
+        } else if (["m", "l", "c", "v", "y", "re"].includes(op)) {
+          hasPath = true;
+        } else if (op === "n" || FILL.has(op) || STROKE.has(op)) {
+          if (hasPath && FILL.has(op)) {
+            await this.paintObject(state, "fill", location, depth);
+          }
+          if (hasPath && STROKE.has(op)) {
+            await this.paintObject(state, "stroke", location, depth);
+          }
+          hasPath = false;
+        } else if (op === "Do") {
+          const obj = args[0] instanceof Name ? this.resource(resources, "XObject", args[0].name) : pdfa_color_inspection_UNKNOWN;
+          await this.xobject(obj, resources, state, location, depth + 1);
+        } else if (op === "sh") {
+          await this.composite(state, "fill", location, depth);
+          this.unknown(location, "Shading colors are outside this inspection.");
+        } else if (op === "BT" || op === "ET") {
+          if (inText === (op === "BT")) {
+            throw new Error("Invalid text boundary");
+          }
+          inText = op === "BT";
+        } else if (op === "Tr") {
+          state.mode = Number.isInteger(args[0]) && args[0] >= 0 && args[0] <= 7 ? args[0] : pdfa_color_inspection_UNKNOWN;
+        } else if (op === "Tf") {
+          state.font = args[0] instanceof Name ? this.resource(resources, "Font", args[0].name) : pdfa_color_inspection_UNKNOWN;
+        } else if (op === "gs") {
+          const gs = args[0] instanceof Name ? this.resource(resources, "ExtGState", args[0].name) : pdfa_color_inspection_UNKNOWN;
+          if (!(gs instanceof Dict)) {
+            Object.assign(state, {
+              font: pdfa_color_inspection_UNKNOWN,
+              blend: pdfa_color_inspection_UNKNOWN,
+              fillAlpha: pdfa_color_inspection_UNKNOWN,
+              strokeAlpha: pdfa_color_inspection_UNKNOWN,
+              mask: pdfa_color_inspection_UNKNOWN
+            });
+            this.unavailable(location, "The graphics state could not be inspected.");
+          } else {
+            const font = this.get(gs, "Font");
+            if (!pdfa_color_inspection_absent(font)) {
+              state.font = Array.isArray(font) ? this.resolve(font[0]) : pdfa_color_inspection_UNKNOWN;
+            }
+            const delta = await this.transparency.graphicsState(gs, state.pageResources, location);
+            const mask = delta.mask;
+            if (mask && mask !== pdfa_color_inspection_UNKNOWN) {
+              mask.sourceState = {
+                ...state,
+                ...OPAQUE,
+                maskSubtype: mask.subtype,
+                ignoreColors: mask.subtype === "Alpha"
+              };
+            }
+            Object.assign(state, delta);
+          }
+        } else if (TEXT.has(op)) {
+          const shown = args.at(-1);
+          const valid = op === "TJ" ? Array.isArray(shown) && shown.every(item => typeof item === "string" || Number.isFinite(item)) : typeof shown === "string";
+          if (!valid || !inText) {
+            throw new Error("Invalid text show");
+          }
+          if ((Array.isArray(shown) ? shown : [shown]).some(item => typeof item === "string" && item.length) && state.mode !== 3 && state.mode !== 7) {
+            const font = state.font;
+            if (state.mode === pdfa_color_inspection_UNKNOWN || !(font instanceof Dict) || !(this.get(font, "Subtype") instanceof Name) || isName(this.get(font, "Subtype"), "Type3")) {
+              this.unavailable(location, "The text rendering mode or Type 3 graphics are outside this inspection.");
+            } else {
+              const base = state.mode % 4;
+              if (base === 0 || base === 2) {
+                await this.paintObject(state, "fill", location, depth);
+              }
+              if (base === 1 || base === 2) {
+                await this.paintObject(state, "stroke", location, depth);
+              }
+            }
+          }
+        }
+        args.length = 0;
+      }
+      if (args.length || inText || stack.length) {
+        this.unavailable(path, "The content stream ended in an incomplete graphics state.");
+      }
+    } catch (error) {
+      if (error instanceof MissingDataException) {
+        throw error;
+      }
+      this.unavailable(path, "Unsupported or malformed content prevented complete graphics inspection.");
+    }
+  }
+  async page(raw, inherited, path, depth) {
+    if (!this.take(path, depth)) {
+      this.transparency.unknown(path, "The page traversal reached its limit.", true);
+      return;
+    }
+    const node = this.resolve(raw);
+    if (!(node instanceof Dict) || this.pageNodes.has(node)) {
+      this.unavailable(path, "The page tree could not be fully inspected.");
+      return;
+    }
+    this.pageNodes.add(node);
+    const entry = this.get(node, "Resources");
+    const resources = pdfa_color_inspection_absent(entry) ? inherited : entry;
+    const type = this.get(node, "Type");
+    if (isName(type, "Pages")) {
+      const kids = this.get(node, "Kids");
+      if (!Array.isArray(kids) || kids.length > MAX_ITEMS) {
+        this.unavailable(path, "The page-tree children could not be inspected.");
+        return;
+      }
+      for (let i = 0; i < kids.length; i++) {
+        await this.page(kids[i], resources, path + "/Kids[" + i + "]", depth + 1);
+      }
+      return;
+    }
+    if (!isName(type, "Page")) {
+      this.unavailable(path, "A page dictionary could not be resolved.");
+      return;
+    }
+    this.counts.pages++;
+    this.pageUse = {
+      transparent: false,
+      masks: new Set()
+    };
+    try {
+      const group = await this.transparency.group(node, resources, path, "page");
+      if (group.hasColor === true) {
+        await this.paint(group.color, pdfa_color_inspection_at(path, "Group/CS"));
+      }
+      await this.pageContents(node, resources, path, depth);
+      this.transparency.page(group, this.pageUse.transparent, this.output, path);
+    } finally {
+      this.pageUse = null;
+    }
+  }
+  async pageContents(node, resources, path, depth) {
+    await this.resources(resources, pdfa_color_inspection_at(path, "Resources"));
+    const annotations = this.get(node, "Annots");
+    if (!pdfa_color_inspection_absent(annotations) && (!Array.isArray(annotations) || annotations.length > MAX_ITEMS || annotations.some(rawAnnot => {
+      const annotation = this.resolve(rawAnnot);
+      return !(annotation instanceof Dict) || !pdfa_color_inspection_absent(this.get(annotation, "AP")) || !pdfa_color_inspection_absent(this.get(annotation, "CA")) || !pdfa_color_inspection_absent(this.get(annotation, "C"));
+    }))) {
+      this.unavailable(pdfa_color_inspection_at(path, "Annots"), "Annotation appearances are outside this inspection.");
+    }
+    const contents = this.get(node, "Contents");
+    if (pdfa_color_inspection_absent(contents)) {
+      return;
+    }
+    const streams = Array.isArray(contents) ? contents : [contents];
+    if (streams.length > MAX_ITEMS) {
+      this.unavailable(path, "The page contains too many content streams.");
+      return;
+    }
+    const parts = [];
+    let length = 0;
+    for (const stream of streams) {
+      const bytes = await this.bytes(this.resolve(stream));
+      if (!bytes || (length += bytes.length) > pdfa_color_inspection_MAX_BYTES) {
+        this.unavailable(path, "The complete page content could not be read.");
+        return;
+      }
+      parts.push(bytes);
+    }
+    const combined = parts.length === 1 ? parts[0] : new Uint8Array(length);
+    if (parts.length !== 1) {
+      let offset = 0;
+      for (const bytes of parts) {
+        combined.set(bytes, offset);
+        offset += bytes.length;
+      }
+    }
+    const gray = {
+      device: pdfa_color_inspection_DEVICES.get("DeviceGray"),
+      resources
+    };
+    await this.content(combined, resources, {
+      ...OPAQUE,
+      fill: gray,
+      stroke: gray,
+      mode: 0,
+      font: null,
+      pageResources: resources
+    }, pdfa_color_inspection_at(path, "Contents"), depth);
+  }
+  finish() {
+    return {
+      checks: pdfa_color_inspection_RULES.map(id => this.results.get(id) ?? {
+        id,
+        status: "not-applicable",
+        location: "",
+        detail: "No applicable color evidence in the inspected scope."
+      }),
+      counts: this.counts
+    };
+  }
+}
+async function inspectPdfAGraphics(xref, trusted) {
+  const inspection = new ColorInspection(xref);
+  const catalog = trusted && !xref.encrypt ? inspection.get(xref.trailer, "Root") : null;
+  if (!(catalog instanceof Dict)) {
+    inspection.unknown("/Root", "The original document color objects could not be established.", pdfa_color_inspection_RULES);
+    inspection.transparency.unknown("/Root", "The original transparency objects could not be established.", true);
+  } else {
+    await inspection.intents(catalog);
+    await inspection.page(catalog.getRaw("Pages"), null, "/Root/Pages", 0);
+  }
+  return {
+    colors: inspection.finish(),
+    transparency: inspection.transparency.finish()
+  };
 }
 
 ;// ./src/core/intersector.js
@@ -69701,7 +70295,10 @@ class PDFDocument {
     const document = inspectPdfADocument(this.xref, trusted);
     const embeddedFiles = inspectPdfAEmbeddedFiles(this.xref, trusted);
     const fonts = await inspectPdfAFonts(this.xref, trusted);
-    const colors = await inspectPdfAColors(this.xref, trusted);
+    const {
+      colors,
+      transparency
+    } = await inspectPdfAGraphics(this.xref, trusted);
     if (!trusted) {
       return {
         version: 1,
@@ -69711,7 +70308,8 @@ class PDFDocument {
         document,
         embeddedFiles,
         fonts,
-        colors
+        colors,
+        transparency
       };
     }
     const value = trailer.getRaw("ID");
@@ -69756,7 +70354,8 @@ class PDFDocument {
       document,
       embeddedFiles,
       fonts,
-      colors
+      colors,
+      transparency
     };
   }
   get numPages() {
@@ -74525,7 +75124,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "6.4.163";
+    const workerVersion = "6.4.164";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }

@@ -13,6 +13,7 @@ import { makePdfaDocumentCases, makePdfaDocumentFixture } from '../tests/pdfa-do
 import { makePdfaEmbeddingCases } from '../tests/pdfa-embedding-cases.mjs';
 import { makePdfaFontCases, makePdfaFontFixture } from '../tests/pdfa-font-cases.mjs';
 import { makePdfaColorCases, makePdfaColorFixture } from '../tests/pdfa-color-cases.mjs';
+import { makePdfaTransparencyCases, makePdfaTransparencyFixture } from '../tests/pdfa-transparency-cases.mjs';
 import { sha256, validatePdfA } from '../src/pdfa-validation.mjs';
 const fork = process.argv[2];
 const executablePath = process.argv[3] || process.env.PDFJS_TEST_BROWSER;
@@ -47,6 +48,16 @@ const cases = [
     ['uncalibrated-rgb.pdf', makePdfaColorFixture(xml), 'fail', 'pass', 'pass', '6.2.4.3-2'],
     ['icc-components.pdf', makePdfaColorFixture(xml, { icc: 'mismatch', paint: '/Icc cs 1 sc 0 0 10 10 re f' }),
         'fail', 'pass', 'pass', 'PDF-ICC-STRUCTURE'],
+    ['transparency-group.pdf', makePdfaTransparencyFixture(xml, { graphicsState: '/BM /Darken', pageGroup: true }),
+        'unknown', 'pass', 'pass'],
+    ['invalid-blend-mode.pdf', makePdfaTransparencyFixture(xml, { graphicsState: '/BM /MadeUp' }),
+        'fail', 'pass', 'pass', '6.2.10-1'],
+    ['missing-page-blend-space.pdf', makePdfaTransparencyFixture(xml, { graphicsState: '/ca 0.5' }),
+        'fail', 'pass', 'pass', '6.2.10-2'],
+    ['image-soft-mask.pdf', makePdfaTransparencyFixture(xml, { imageMask: '/DeviceGray', pageGroup: true }),
+        'unknown', 'pass', 'pass'],
+    ['missing-mask-group.pdf', makePdfaTransparencyFixture(xml, { graphicsState: '/SMask << /S /Alpha >>', pageGroup: true }),
+        'fail', 'pass', 'pass', 'PDF-SOFT-MASK'],
     ['invoice.xml', new TextEncoder().encode(xml), 'pass', null, null],
 ];
 const server = createServer();
@@ -102,6 +113,16 @@ try {
                 }
                 assert.ok(report.pdfValidation.pdfA.colorCounts.outputIntents > 0);
             }
+            if (name === 'transparency-group.pdf') {
+                for (const id of ['6.2.10-1', '6.2.10-2', 'PDF-TRANSPARENCY-GROUP']) {
+                    assert.equal(report.pdfValidation.pdfA.rules.find(rule => rule.id === id).status, 'pass', id);
+                }
+                assert.ok(report.pdfValidation.pdfA.transparencyCounts);
+            }
+            if (name === 'image-soft-mask.pdf') {
+                assert.equal(report.pdfValidation.pdfA.rules.find(rule => rule.id === 'PDF-SOFT-MASK').status, 'pass');
+                assert.equal(report.pdfValidation.pdfA.transparencyCounts.imageSoftMasks, 1);
+            }
             if (name === 'document-objects.pdf') {
                 assert.equal(report.pdfValidation.pdfA.documentCounts.pages, 2);
                 for (const id of ['PDF-CATALOG', 'PDF-PAGE-TREE', '6.3.1-1', '6.5.1-1']) {
@@ -124,6 +145,7 @@ try {
         ...makePdfaEmbeddingCases(xml),
         ...makePdfaFontCases(xml),
         ...makePdfaColorCases(xml),
+        ...makePdfaTransparencyCases(xml),
     ];
     for (const { name, bytes } of standaloneCases) {
         const inBrowser = await page.evaluate(async input => {

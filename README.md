@@ -293,6 +293,10 @@ Die drei getrennten Prüfzeilen bedeuten:
   Die Farbprüfung untersucht Output Intents, die Struktur eingebetteter
   ICC-Profile und verwendete Gerätefarbräume
   ([Regeln 6.2.3 und 6.2.4](https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-623-1)).
+  Die Transparenzprüfung kontrolliert Blend-Modi, Transparenzgruppen,
+  Soft Masks und Deckkraft. Bei transparenter Seitendarstellung prüft sie auf
+  einen PDF/A-Output-Intent oder einen expliziten Seiten-Blendfarbraum
+  ([Regeln 6.2.10-1 und 6.2.10-2](https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-6210-1)).
   Ein eindeutiger Verstoß ergibt einen Fehler. Die Vollprüfung bleibt ohne
   Verstoß offen. Dazu fehlen u. a. vollständige Schrift-, Farb- und
   Transparenzprüfungen.
@@ -375,8 +379,23 @@ unter anderem Profilklasse, Farbraum, Version und die Komponentenzahl bei
 ICCBased-Farbräumen. Bei mehreren Output Intents wird der Verweis auf den
 gemeinsamen Profilstream geprüft. Der JSON-Bericht enthält colorCounts.
 ICC-Transformationen und weitere ICC-Anforderungen bleiben offen. Das gilt
-auch für Farbnutzung in Transparenzgruppen, Soft Masks, Mustern, Schattierungen,
-Inline-Bildern, Type-3-Glyphen und Anmerkungsdarstellungen.
+auch für Farbnutzung in Mustern, Schattierungen, Inline-Bildern, Type-3-Glyphen
+und Anmerkungsdarstellungen.
+
+Die Transparenzprüfung verfolgt die tatsächlich verwendeten Grafikzustände
+auf Seiten und in aufgerufenen Form-XObjects. Sie berücksichtigt die Reihenfolge
+der Blend-Modi, separate Deckkraft für Kontur und Füllung, das Speichern und
+Wiederherstellen mit q/Q sowie die Gruppen beim Zeichnen eines Forms. Ein
+Blendfarbraum innerhalb eines Forms erfüllt die Anforderung an die Seite
+allein nicht. Der Worker untersucht Soft-Mask-Dictionaries mit /Alpha oder
+/Luminosity und Soft Masks an Bild-XObjects. Bei einer /Alpha-Maske dient
+der Inhalt der Form der Maskenform. Bei einer Bildmaske dient deren Grau der
+Maske. Diese Werte zählt die Farbprüfung nicht als sichtbare Gerätefarben.
+Der JSON-Bericht enthält transparencyCounts. Die Prüfung lässt unter anderem
+JPEG-2000-Alphadaten, Masken-Transferfunktionen und Transparenz in Mustern,
+Inline-Bildern, Type-3-Glyphen und Anmerkungsdarstellungen offen. Die Prüfung
+arbeitet auf PDF-Objekten und Grafikoperatoren. Pixel und ICC-Transformationen
+sind außerhalb dieses Prüfumfangs.
 
 ### PDF.js aktualisieren
 
@@ -415,6 +434,13 @@ Im Vergleich meldete veraPDF 1.30.2 Gerätefarben teils bereits beim Setzen des
 Farbraums. Unsere Prüfung meldet sie beim Zeichnen. Bei ungültiger ICC-Signatur,
 ungültigen Tag-Offsets und abweichender Komponentenzahl meldet die lokale
 Strukturprüfung Befunde, die veraPDF 1.30.2 in diesen Testfällen ausließ.
+Transparenzfälle prüfen unter anderem q/Q, Alpha-Konstanten, Blend-Listen,
+Seiten- und Formgruppen sowie Soft Masks in Grafikzuständen und Bildern.
+veraPDF 1.30.2 meldete bei /Compatible, bei einem Blend-Array mit /Normal
+als erstem Eintrag und bei einer vom Bild überschriebenen Soft Mask eine
+fehlende Seitenkalibrierung. Ungültige spätere Blend-Einträge blieben dort
+ohne Befund. Die lokale Prüfung folgt der Auswahlreihenfolge nach
+ISO 32000-1 §11.6.3 und dem Maskenvorrang nach §11.6.4.3.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)

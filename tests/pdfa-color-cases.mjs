@@ -99,7 +99,7 @@ export function makePdfaColorCases(xml) {
         ['an invoked image uses its DeviceRGB color space', { image: true }, { '6.2.4.3-2': 'fail' }],
         ['a form can provide its own DefaultRGB', { form: true, defaults: '/DefaultRGB ' + calRgb }, { '6.2.4.3-2': 'pass' }],
         ['restore uses the previous color state', { paint: 'q 1 0 0 rg Q ' + rectangle }, { '6.2.4.3-2': 'not-applicable', '6.2.4.3-4': 'fail' }],
-        ['transparent page color coverage stays open', { group: true }, { '6.2.4.3-2': 'unknown' }],
+        ['a page blend space does not calibrate DeviceRGB', { group: true }, { '6.2.4.3-2': 'fail' }],
     ];
     return cases.map(([name, options, expect]) => ({ name, bytes: makePdfaColorFixture(xml, options), expect }));
 }

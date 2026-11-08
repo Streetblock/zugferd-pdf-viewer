@@ -61,6 +61,13 @@ const colorRules = [
     { id: '6.2.4.3-3', clause: '6.2.4.3', label: 'Verwendung von DeviceCMYK mit passendem Standardfarbraum oder Ausgabeprofil' },
     { id: '6.2.4.3-4', clause: '6.2.4.3', label: 'Verwendung von DeviceGray mit Standardfarbraum oder PDF/A-Output-Intent' },
 ];
+const transparencyRules = [
+    { id: '6.2.10-1', clause: '6.2.10', label: 'Zulässige Blend-Modi' },
+    { id: '6.2.10-2', clause: '6.2.10', label: 'PDF/A-Output-Intent oder Seiten-Blendfarbraum bei Transparenz' },
+    { id: 'PDF-TRANSPARENCY-GROUP', specification: PDF_SPEC, clause: '11.6.6', label: 'Struktur und Blendfarbraum von Transparenzgruppen' },
+    { id: 'PDF-SOFT-MASK', specification: PDF_SPEC, clause: '11.6.5', label: 'Struktur von Soft Masks' },
+    { id: 'PDF-TRANSPARENCY-STATE', specification: PDF_SPEC, clause: '8.4.5, 11.6.4', label: 'Deckkraft und weitere Transparenzparameter' },
+];
 const xmpRules = [
     { id: '6.6.2.3.1-1', clause: '6.6.2.3.1', label: 'Definition der verwendeten XMP-Eigenschaften' },
     { id: '6.6.2.3.1-2', clause: '6.6.2.3.1', label: 'Wertetypen verwendeter XMP-Eigenschaften' },
@@ -211,7 +218,8 @@ function inspectChecks(definitions, inspection, defaultLocation) {
 }
 
 function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRequired = false }) {
-    const { trailer, xref, document: documentInspection, embeddedFiles, fonts, colors } = inspection?.version === 1 ? inspection : {};
+    const { trailer, xref, document: documentInspection, embeddedFiles, fonts, colors, transparency } =
+        inspection?.version === 1 ? inspection : {};
     const rules = [
         ...fileRules.slice(0, 2),
         inspectTrailerId(trailer?.id),
@@ -222,6 +230,7 @@ function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRe
         ...inspectChecks(embeddedFileRules, embeddedFiles, 'Eingebettete Dateien'),
         ...inspectChecks(fontRules, fonts, 'Schriften und Glyphen'),
         ...inspectChecks(colorRules, colors, 'Farbräume und Ausgabeprofile'),
+        ...inspectChecks(transparencyRules, transparency, 'Transparenz und Blend-Modi'),
         ...inspectChecks(xmpRules, xmpInspection, 'XMP-Metadaten'),
     ];
     return {
@@ -235,6 +244,7 @@ function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRe
         ...(embeddedFiles?.counts ? { embeddedFileCounts: embeddedFiles.counts } : {}),
         ...(fonts?.counts ? { fontCounts: fonts.counts } : {}),
         ...(colors?.counts ? { colorCounts: colors.counts } : {}),
+        ...(transparency?.counts ? { transparencyCounts: transparency.counts } : {}),
         ...(xmpInspection?.counts ? { xmpCounts: xmpInspection.counts } : {}),
     };
 }
