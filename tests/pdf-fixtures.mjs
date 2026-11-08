@@ -1,5 +1,24 @@
 import { deflateSync } from 'node:zlib';
-export const xmpFor = (profile = 'EN 16931') => `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" pdfaid:part="3" pdfaid:conformance="B" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#" fx:DocumentType="INVOICE" fx:DocumentFileName="factur-x.xml" fx:Version="1.0" fx:ConformanceLevel="${profile}"/></rdf:RDF></x:xmpmeta>`;
+const facturX = 'urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#';
+const facturXExtension = `<rdf:Description rdf:about=""
+    xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
+    xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"
+    xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+  <pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">
+    <pdfaSchema:schema>Factur-X PDF/A Extension Schema</pdfaSchema:schema>
+    <pdfaSchema:namespaceURI>${facturX}</pdfaSchema:namespaceURI>
+    <pdfaSchema:prefix>fx</pdfaSchema:prefix>
+    <pdfaSchema:property><rdf:Seq>
+      ${['DocumentType', 'DocumentFileName', 'Version', 'ConformanceLevel'].map(name => `<rdf:li rdf:parseType="Resource">
+        <pdfaProperty:name>${name}</pdfaProperty:name>
+        <pdfaProperty:valueType>Text</pdfaProperty:valueType>
+        <pdfaProperty:category>external</pdfaProperty:category>
+        <pdfaProperty:description>${name}</pdfaProperty:description>
+      </rdf:li>`).join('')}
+    </rdf:Seq></pdfaSchema:property>
+  </rdf:li></rdf:Bag></pdfaExtension:schemas>
+</rdf:Description>`;
+export const xmpFor = (profile = 'EN 16931', { extension = true } = {}) => `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">${extension ? facturXExtension : ''}<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" pdfaid:part="3" pdfaid:conformance="B" xmlns:fx="${facturX}" fx:DocumentType="INVOICE" fx:DocumentFileName="factur-x.xml" fx:Version="1.0" fx:ConformanceLevel="${profile}"/></rdf:RDF></x:xmpmeta>`;
 // Synthetic containers with real invoice XML. They are NOT full PDF/A fixtures.
 export function makePdf(xml, options = {}) {
     const fileId = '/ID [<00112233445566778899aabbccddeeff> <00112233445566778899aabbccddeeff>]';
@@ -8,16 +27,21 @@ export function makePdf(xml, options = {}) {
         if (options.compressed) { data = deflateSync(data); dict += ' /Filter /FlateDecode'; }
         return `<< ${dict} /Length ${data.length} >>\nstream\n${data.toString('latin1')}\nendstream`;
     };
-    const spec = `<< /Type /Filespec /F (factur-x.xml) /UF (factur-x.xml) /AFRelationship /${options.relationship || 'Alternative'} /EF << /F 5 0 R /UF ${options.conflicting ? 9 : 5} 0 R >> >>`;
-    const catalog = `<< /Type /Catalog /Pages 2 0 R ${options.afOnly ? '' : '/Names << /EmbeddedFiles 7 0 R >>'} ${options.missingAF ? '' : '/AF [4 0 R]'} ${options.missingXMP ? '' : '/Metadata 6 0 R'} >>`;
+    const spec = `<< /Type /Filespec /F (factur-x.xml) ${options.missingUF ? '' : '/UF (factur-x.xml)'} ${options.relationship === null ? '' : '/AFRelationship /' + (options.relationship || 'Alternative')} /EF << /F 5 0 R /UF ${options.conflicting ? 9 : 5} 0 R >> >>`;
+    const catalog = `<< /Type /Catalog /Pages 2 0 R ${options.afOnly ? '' : '/Names << /EmbeddedFiles 7 0 R >>'} ${options.missingAF ? '' : '/AF [4 0 R' + (options.extraMime ? ' 8 0 R' : '') + ']'} ${options.missingXMP ? '' : '/Metadata 6 0 R'} >>`;
     const objects = new Map([
         [1, options.incremental ? '<< /Type /Catalog /Pages 2 0 R >>' : catalog],
         [2, '<< /Type /Pages /Count 1 /Kids [3 0 R] >>'],
-        [3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> >>'],
-        [4, spec], [5, stream(xml, `/Type /EmbeddedFile /Subtype /${options.mime || 'application#2fxml'}`)],
+        [3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> ${options.pageAF ? '/AF [4 0 R]' : ''} ${options.contentAF ? '/Contents 8 0 R' : ''} >>`],
+        [4, spec], [5, stream(xml, `/Type /EmbeddedFile ${options.mime === null ? '' : '/Subtype /' + (options.mime || 'application#2fxml')}`)],
         [6, stream(options.xmp ?? xmpFor(), '/Type /Metadata /Subtype /XML')],
-        [7, `<< /Names [(factur-x.xml) 4 0 R ${options.duplicate ? '(factur-x.xml) 8 0 R' : ''}] >>`]
+        [7, `<< /Names [(factur-x.xml) 4 0 R ${options.duplicate ? '(factur-x.xml) 8 0 R' : ''} ${options.extraMime ? '(readme.txt) 8 0 R' : ''}] >>`]
     ]);
+    if (options.extraMime) {
+        objects.set(8, '<< /Type /Filespec /F (readme.txt) /UF (readme.txt) /AFRelationship /Supplement /EF << /F 9 0 R >> >>');
+        objects.set(9, stream('Supplement', '/Type /EmbeddedFile /Subtype /' + options.extraMime));
+    }
+    if (options.contentAF) objects.set(8, stream('/Span << /AF [4 0 R] >> BDC EMC', ''));
     if (options.duplicate) objects.set(8, spec);
     if (options.conflicting) objects.set(9, stream(xml.replace('CrossIndustryInvoice', 'Other'), '/Type /EmbeddedFile /Subtype /application#2fxml'));
     if (options.objectStream) { objects.delete(4); objects.set(10, stream(`4 0 ${spec}`, '/Type /ObjStm /N 1 /First 4')); }
@@ -46,7 +70,7 @@ export function makePdf(xml, options = {}) {
     if (options.incremental) {
         append(1, catalog);
         const previous = xref; xref = pdf.length;
-        pdf += `xref\n1 1\n${String(offsets.get(1)).padStart(10, '0')} 00000 n \ntrailer\n<< /Size 8 /Root 1 0 R ${fileId} /Prev ${previous} >>\nstartxref\n${xref}\n%%EOF\n`;
+        pdf += `xref\n1 1\n${String(offsets.get(1)).padStart(10, '0')} 00000 n \ntrailer\n<< /Size ${Math.max(...objects.keys()) + 1} /Root 1 0 R ${fileId} /Prev ${previous} >>\nstartxref\n${xref}\n%%EOF\n`;
     }
     return Uint8Array.from(Buffer.from(pdf, 'latin1'));
 }

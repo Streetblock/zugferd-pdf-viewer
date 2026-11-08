@@ -13,6 +13,8 @@ const assets = new Map([
     ['/src/validation.js', ['src/validation.js', 'text/javascript']],
     ['/src/pdf-validation.mjs', ['src/pdf-validation.mjs', 'text/javascript']],
     ['/src/pdfa-validation.mjs', ['src/pdfa-validation.mjs', 'text/javascript']],
+    ['/src/pdfa-xml.mjs', ['src/pdfa-xml.mjs', 'text/javascript']],
+    ['/src/pdfa-xmp.mjs', ['src/pdfa-xmp.mjs', 'text/javascript']],
     ['/vendor/pdfjs/pdf.mjs', ['vendor/pdfjs/pdf.mjs', 'text/javascript']],
     ['/vendor/pdfjs/pdf.worker.mjs', ['vendor/pdfjs/pdf.worker.mjs', 'text/javascript']],
     ['/vendor/pdfjs/manifest.json', ['vendor/pdfjs/manifest.json', 'application/json']],

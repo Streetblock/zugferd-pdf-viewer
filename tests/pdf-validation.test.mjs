@@ -27,7 +27,10 @@ test('PDF/A file rules detect individual defects without certifying the document
         assert.equal(report.status, failedRule ? 'invalid' : 'partial', name);
         const fileRules = report.rules.filter(result => result.id.startsWith('6.1.2-') || result.id.startsWith('6.1.3-'));
         assert.deepEqual(fileRules.filter(result => result.status === 'fail').map(result => result.id), failedRule ? [failedRule] : [], name);
-        if (!failedRule) assert.ok(report.rules.every(completed), name);
+        if (!failedRule) {
+            assert.equal(report.status, 'partial', name);
+            assert.ok(report.rules.filter(result => !result.id.startsWith('6.6.2.3.')).every(completed), name);
+        }
     }
 });
 
@@ -69,24 +72,25 @@ for (const options of [{}, { compressed: true, objectStream: true }, { increment
         assert.ok(!JSON.stringify(data.pdfReport).includes('<rsm:CrossIndustryInvoice'));
     });
 }
-for (const [name, options, stage, expected] of [
-    ['missing AF', { missingAF: true }, 'embedding', 'fail'],
+for (const [name, options, stage, expected, expectedPdf = 'unknown'] of [
+    ['missing AF', { missingAF: true }, 'embedding', 'fail', 'fail'],
+    ['page association does not satisfy the invoice catalog check', { missingAF: true, pageAF: true }, 'embedding', 'fail'],
     ['wrong MIME', { mime: 'text#2fplain' }, 'embedding', 'fail'],
     ['AF only', { afOnly: true }, 'embedding', 'unknown'],
     ['Source relationship needs context', { relationship: 'Source' }, 'embedding', 'unknown'],
-    ['repaired PDF', { recovery: true }, 'embedding', 'unknown'],
+    ['repaired PDF', { recovery: true }, 'embedding', 'unknown', 'fail'],
     ['missing XMP', { missingXMP: true }, 'metadata', 'fail'],
     ['broken XMP', { xmp: '<broken>' }, 'metadata', 'fail'],
     ['DTD in XMP', { xmp: '<!DOCTYPE x><x/>' }, 'metadata', 'fail'],
     ['wrong filename', { xmp: xmpFor().replace('fx:DocumentFileName="factur-x.xml"', 'fx:DocumentFileName="other.xml"') }, 'metadata', 'fail'],
     ['wrong profile', { xmp: xmpFor('EXTENDED') }, 'metadata', 'fail'],
-    ['wrong namespace', { xmp: xmpFor().replace('http://www.aiim.org/pdfa/ns/id/', 'https://fake.invalid/') }, 'metadata', 'fail'],
+    ['wrong namespace', { xmp: xmpFor().replace('http://www.aiim.org/pdfa/ns/id/', 'https://fake.invalid/') }, 'metadata', 'fail', 'fail'],
     ['PDF/A-2 ID', { xmp: xmpFor().replace('pdfaid:part="3"', 'pdfaid:part="2"') }, 'metadata', 'fail'],
     ['unknown version', { xmp: xmpFor().replace('fx:Version="1.0"', 'fx:Version="9.9"') }, 'metadata', 'unknown'],
 ]) test(name, async () => {
     const data = await extractInvoice(makePdf(xml, options), adapter);
     assert.equal(status(data, stage), expected);
-    assert.equal(status(data, 'pdf'), options.recovery ? 'fail' : 'unknown');
+    assert.equal(status(data, 'pdf'), expectedPdf);
 });
 for (const options of [{ duplicate: true }, { conflicting: true }]) test('Reject ambiguous XML source: ' + JSON.stringify(options), async () => {
     await assert.rejects(extractInvoice(makePdf(xml, options), adapter), /Mehrere|Widersprüchliche/);

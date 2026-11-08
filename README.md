@@ -279,9 +279,16 @@ Die drei getrennten Prüfzeilen bedeuten:
   Aktionen im Katalog, auf Seiten und in Formularen. Die PDF/A-Regeln dazu
   stehen in den Abschnitten 6.3, 6.4 und 6.5 der
   [veraPDF-Regelreferenz](https://github.com/veraPDF/veraPDF-validation-profiles/wiki/PDFA-Parts-2-and-3-rules#rule-631-1).
+  Die Regeln 6.8-1 bis 6.8-4 prüfen PDF/A-3-Anhänge allgemein, einschließlich
+  zusätzlicher Dateien neben dem Rechnungs-XML. Sie untersuchen MIME-Typ,
+  /F, /UF, /AFRelationship und die Zuordnung über /AF. Eine Zuordnung etwa
+  zur Seite kann diese PDF/A-Regel erfüllen. Die ZUGFeRD-Basisprüfung
+  kontrolliert separat die Einbettung des Rechnungs-XML im Dokumentkatalog.
+  Für XMP werden Erweiterungsdeklarationen, ihre RDF-Container und
+  Pflichtfelder, definierte Eigenschaften und unterstützte Wertetypen geprüft.
   Ein eindeutiger Verstoß ergibt einen Fehler. Die Vollprüfung bleibt ohne
-  Verstoß offen. Dazu fehlen u. a. Schrift-, Farbraum-, Inhalts- und
-  XMP-Erweiterungsprüfungen.
+  Verstoß offen. Dazu fehlen u. a. vollständige Schrift-, Farbraum- und
+  Inhaltsprüfungen.
 
 Ein grünes **Basis**-Ergebnis ist bewusst nur eine Aussage zu diesem Teilumfang.
 Es bestätigt keine vollständige Factur-X-, ZUGFeRD- oder PDF/A-Konformität.
@@ -321,6 +328,19 @@ können betroffene Regeln offen bleiben. Inhalt und Zustände von
 Darstellungsstreams sind noch offen. Der Bericht zählt die erfassten
 Dokumentobjekte unter documentCounts.
 
+Die Anhangprüfung liest die Dateispezifikationen und Stream-Dictionaries im
+Worker. Sie wertet Zuordnungen im Katalog, auf Seiten, in Annotationen, im
+Strukturbaum und an erreichbaren XObjects aus. Mögliche Zuordnungen im
+Seiteninhalt, beschädigte Verweise und nicht eingeordnete Beziehungsnamen
+können offen bleiben. Die optionale /Params-Struktur und die vollständigen
+Namensbaumregeln sind noch offen.
+
+XMP-Erweiterungen werden auf den Originalmetadaten geprüft. Der Browser
+verwendet DOMParser, Node den vorhandenen libxml2-WASM-Parser. DTDs und externe
+Entitäten werden nicht verarbeitet. Unbekannte oder nicht vollständig
+interpretierbare Wertetypen können offen bleiben. Der JSON-Bericht enthält die
+Zähler embeddedFileCounts und xmpCounts, soweit die Daten lesbar waren.
+
 ### PDF.js aktualisieren
 
 Im separaten Fork alle Änderungen committen und anschließend bauen:
@@ -346,6 +366,9 @@ Ein unverändertes PDF/A-3b-Beispiel, gezielt veränderte Fassungen und syntheti
 Strukturfälle prüfen identische Befunde in Browser und Node. Dazu gehören
 klassische Tabellen, XRef- und Objektstreams, inkrementelle und hybride
 Querverweise sowie gezielte Defekte in Seitenbaum, Anmerkungen und Aktionen.
+Die Anhang- und XMP-Fälle enthalten unter anderem PDF/A-Zuordnungen an Seiten,
+einen zusätzlichen Anhang mit fehlerhaftem MIME-Typ und fehlende oder fehlerhafte
+XMP-Erweiterungsdeklarationen bei weiterhin gültigem Rechnungs-XML.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)

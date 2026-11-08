@@ -10,6 +10,7 @@ import { makePdf, xmpFor } from '../tests/pdf-fixtures.mjs';
 import { pdfaCases } from '../tests/pdfa-cases.mjs';
 import { makePdfaStructureCases } from '../tests/pdfa-structure-cases.mjs';
 import { makePdfaDocumentCases, makePdfaDocumentFixture } from '../tests/pdfa-document-cases.mjs';
+import { makePdfaEmbeddingCases } from '../tests/pdfa-embedding-cases.mjs';
 import { sha256, validatePdfA } from '../src/pdfa-validation.mjs';
 const fork = process.argv[2];
 const executablePath = process.argv[3] || process.env.PDFJS_TEST_BROWSER;
@@ -24,7 +25,7 @@ const invalidXrefEol = Buffer.from(Buffer.from(makePdf(xml)).toString('latin1').
 const cases = [
     ['good.pdf', makePdf(xml, { compressed: true, objectStream: true }), 'unknown', 'pass', 'pass'],
     ['incremental.pdf', makePdf(xml, { incremental: true, compressed: true }), 'unknown', 'pass', 'pass'],
-    ['missing-af.pdf', makePdf(xml, { missingAF: true }), 'fail', 'fail', 'pass'],
+    ['missing-af.pdf', makePdf(xml, { missingAF: true }), 'fail', 'fail', 'pass', '6.8-4'],
     ['wrong-xmp.pdf', makePdf(xml, { xmp: xmpFor('EXTENDED') }), 'fail', 'pass', 'fail'],
     ['source.pdf', makePdf(xml, { relationship: 'Source' }), 'unknown', 'unknown', 'pass'],
     ['trailing-data.pdf', Buffer.concat([makePdf(xml), Buffer.from('trailing data')]), 'fail', 'pass', 'pass', '6.1.3-3'],
@@ -32,6 +33,9 @@ const cases = [
     ['document-objects.pdf', makePdfaDocumentFixture(xml), 'unknown', 'pass', 'pass'],
     ['forbidden-action.pdf', makePdfaDocumentFixture(xml, { action: '<< /S /Launch /F (x.exe) >>' }),
         'fail', 'pass', 'pass', '6.5.1-1'],
+    ['invalid-other-attachment.pdf', makePdf(xml, { extraMime: 'unknown' }), 'fail', 'pass', 'pass', '6.8-1'],
+    ['missing-xmp-schema.pdf', makePdf(xml, { xmp: xmpFor('EN 16931', { extension: false }) }),
+        'fail', 'pass', 'pass', '6.6.2.3.1-1'],
     ['invoice.xml', new TextEncoder().encode(xml), 'pass', null, null],
 ];
 const server = createServer();
@@ -94,6 +98,7 @@ try {
         ...pdfaCases.map(([name, bytes]) => ({ name, bytes })),
         ...makePdfaStructureCases(xml),
         ...makePdfaDocumentCases(xml),
+        ...makePdfaEmbeddingCases(xml),
     ];
     for (const { name, bytes } of standaloneCases) {
         const inBrowser = await page.evaluate(async input => {

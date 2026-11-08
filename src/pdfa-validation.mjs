@@ -1,3 +1,6 @@
+import { inspectPdfAXmp } from './pdfa-xmp.mjs';
+import { inspectXmpBytes } from './pdfa-xml.mjs';
+
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const textDecoder = new TextDecoder('latin1');
 const PDF_A_SPEC = 'ISO 19005-3:2012';
@@ -33,6 +36,38 @@ const documentRules = [
     { id: '6.5.1-2', clause: '6.5.1', label: 'Zulässige Namen für Navigationsaktionen' },
     { id: '6.5.2-1', clause: '6.5.2', label: 'Keine zusätzlichen Aktionen im Dokumentkatalog (/AA)' },
     { id: '6.5.2-2', clause: '6.5.2', label: 'Keine zusätzlichen Aktionen auf Seiten (/AA)' },
+];
+const embeddedFileRules = [
+    { id: 'PDF-EMBEDDED-FILE', specification: PDF_SPEC, clause: '7.11.3, 7.11.4', label: 'Dateispezifikationen und eingebettete Streams' },
+    { id: '6.8-1', clause: '6.8', label: 'MIME-Typ eingebetteter Dateien' },
+    { id: '6.8-2', clause: '6.8', label: 'Dateinamen /F und /UF eingebetteter Dateien' },
+    { id: '6.8-3', clause: '6.8', label: 'Beziehung /AFRelationship eingebetteter Dateien' },
+    { id: '6.8-4', clause: '6.8', label: 'Zuordnung eingebetteter Dateien zum Dokument oder einem PDF-Objekt' },
+];
+const xmpRules = [
+    { id: '6.6.2.3.1-1', clause: '6.6.2.3.1', label: 'Definition der verwendeten XMP-Eigenschaften' },
+    { id: '6.6.2.3.1-2', clause: '6.6.2.3.1', label: 'Wertetypen verwendeter XMP-Eigenschaften' },
+    { id: '6.6.2.3.2-1', clause: '6.6.2.3.2', label: 'Zulässige Felder der XMP-Erweiterungsdefinitionen' },
+    ...[
+        'Container für XMP-Erweiterungsschemata',
+        'Name des XMP-Erweiterungsschemas',
+        'Namensraum des XMP-Erweiterungsschemas',
+        'Präfix des XMP-Erweiterungsschemas',
+        'Liste der XMP-Eigenschaftsdefinitionen',
+        'Liste der benutzerdefinierten XMP-Wertetypen',
+        'Name der XMP-Eigenschaft',
+        'Wertetyp der XMP-Eigenschaft',
+        'Kategorie der XMP-Eigenschaft',
+        'Beschreibung der XMP-Eigenschaft',
+        'Name des benutzerdefinierten XMP-Wertetyps',
+        'Namensraum des benutzerdefinierten XMP-Wertetyps',
+        'Präfix des benutzerdefinierten XMP-Wertetyps',
+        'Beschreibung des benutzerdefinierten XMP-Wertetyps',
+        'Feldliste des benutzerdefinierten XMP-Wertetyps',
+        'Name des XMP-Typfeldes',
+        'Wertetyp des XMP-Typfeldes',
+        'Beschreibung des XMP-Typfeldes',
+    ].map((label, index) => ({ id: `6.6.2.3.3-${index + 1}`, clause: '6.6.2.3.3', label })),
 ];
 let runtimePromise;
 
@@ -158,8 +193,8 @@ function inspectChecks(definitions, inspection, defaultLocation) {
     });
 }
 
-function buildReport(profile, fileRules, inspection, passwordRequired = false) {
-    const { trailer, xref, document: documentInspection } = inspection?.version === 1 ? inspection : {};
+function buildReport(profile, fileRules, { inspection, xmpInspection, passwordRequired = false }) {
+    const { trailer, xref, document: documentInspection, embeddedFiles } = inspection?.version === 1 ? inspection : {};
     const rules = [
         ...fileRules.slice(0, 2),
         inspectTrailerId(trailer?.id),
@@ -167,6 +202,8 @@ function buildReport(profile, fileRules, inspection, passwordRequired = false) {
         fileRules[2],
         ...inspectChecks(xrefRules, xref, 'Querverweise'),
         ...inspectChecks(documentRules, documentInspection, 'Dokumentstruktur'),
+        ...inspectChecks(embeddedFileRules, embeddedFiles, 'Eingebettete Dateien'),
+        ...inspectChecks(xmpRules, xmpInspection, 'XMP-Metadaten'),
     ];
     return {
         specification: PDF_A_SPEC,
@@ -176,12 +213,17 @@ function buildReport(profile, fileRules, inspection, passwordRequired = false) {
         rules,
         ...(xref?.counts ? { structureCounts: xref.counts } : {}),
         ...(documentInspection?.counts ? { documentCounts: documentInspection.counts } : {}),
+        ...(embeddedFiles?.counts ? { embeddedFileCounts: embeddedFiles.counts } : {}),
+        ...(xmpInspection?.counts ? { xmpCounts: xmpInspection.counts } : {}),
     };
 }
 
-export function assessPdfAFile(bytes, { inspection, profile = '3b' } = {}) {
+export function assessPdfAFile(bytes, { inspection, xmpDocument, profile = '3b' } = {}) {
     checkInput(bytes, profile);
-    return buildReport(profile, [...inspectFileHeader(bytes), inspectEof(bytes)], inspection);
+    return buildReport(profile, [...inspectFileHeader(bytes), inspectEof(bytes)], {
+        inspection,
+        xmpInspection: inspectPdfAXmp(xmpDocument),
+    });
 }
 
 export async function validatePdfA(bytes, { profile = '3b' } = {}) {
@@ -192,13 +234,25 @@ export async function validatePdfA(bytes, { profile = '3b' } = {}) {
     const pdfjs = await loadPdfRuntime();
     const task = pdfjs.getDocument({ data, isEvalSupported: false });
     let inspection;
+    let xmpInspection;
     let passwordRequired = false;
     try {
-        inspection = await (await task.promise).getPdfAFileInspection();
+        const pdf = await task.promise;
+        try {
+            inspection = await pdf.getPdfAFileInspection();
+        } catch {
+            // A file-structure inspection failure must not hide readable metadata.
+        }
+        try {
+            const { metadata } = await pdf.getEmbeddedFileInspection({ metadataOnly: true });
+            if (metadata?.bytes) xmpInspection = await inspectXmpBytes(metadata.bytes);
+        } catch {
+            // Missing or unreadable XMP leaves its extension rules open.
+        }
     } catch (error) {
         passwordRequired = error instanceof pdfjs.PasswordException;
     } finally {
         await task.destroy();
     }
-    return { ...buildReport(profile, fileRules, inspection, passwordRequired), sourceSha256 };
+    return { ...buildReport(profile, fileRules, { inspection, xmpInspection, passwordRequired }), sourceSha256 };
 }

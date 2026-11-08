@@ -67,7 +67,8 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
         checkedAt: new Date().toISOString(), scope: 'Basisprüfungen für PDF-Einbettung, XMP und PDF/A-Datei- und Objektregeln', status: 'partial',
         parser: evidence.parser, limits: evidence.limits, checks: [], issues: [], metadata: {}, files: [],
         limitations: ['Keine vollständige PDF/A-3-Prüfung.', 'Keine vollständigen versionsabhängigen Einbettungsregeln.',
-            'Parser-Reparaturen werden noch nicht vollständig erfasst.', 'Keine Prüfung der XMP-Erweiterungsschemata oder der PDF-Bild/XML-Übereinstimmung.'] };
+            'Parser-Reparaturen werden noch nicht vollständig erfasst.', 'Einbettungen im Seiteninhalt und XMP-Wertetypen werden nur teilweise erfasst.',
+            'Keine Prüfung der PDF-Bild/XML-Übereinstimmung.'] };
     const add = (stage, rule, message, severity = 'error', location = '') => report.issues.push({ stage, rule, message, severity, location });
     for (const issue of evidence.issues) {
         const incomplete = ['byte-limit', 'tree-limit', 'entry-limit', 'unreadable-object', 'encrypted-stream-unavailable'].includes(issue.code);
@@ -96,6 +97,7 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
     report.nameTreeEntries = evidence.nameTreeEntries;
     report.associatedFiles = evidence.associatedFiles;
     const meta = evidence.metadata;
+    let xmpDocument;
     const profileId = [...doc.getElementsByTagNameNS(CII, 'ExchangedDocumentContext')][0]
         ?.getElementsByTagNameNS('urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100', 'GuidelineSpecifiedDocumentContextParameter')[0]
         ?.getElementsByTagNameNS('urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100', 'ID')[0]?.textContent.trim() || '';
@@ -107,6 +109,7 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
         if (!named(meta.type, 'Metadata') || !named(meta.subtype, 'XML')) add('metadata', 'XMP-TYPE', 'Der Metadatenstream ist nicht korrekt als Metadata/XML gekennzeichnet.');
         try {
             const xmp = parseXml(decodeXml(meta.bytes));
+            xmpDocument = xmp;
             const one = (ns, key) => {
                 const found = values(xmp, ns, key);
                 if (found.length !== 1 || !found[0]) { add('metadata', 'XMP-FIELD', `${key}: Angabe fehlt, ist leer oder mehrfach vorhanden.`); return ''; }
@@ -132,7 +135,7 @@ export async function extractInvoice(bytes, { parseXml, decodeXml, profileOf, pd
     }
     const { part, conformance } = report.metadata;
     const pdfAProfile = part === '3' && ['A', 'B', 'U'].includes(conformance) ? `3${conformance.toLowerCase()}` : null;
-    const pdfA = assessPdfAFile(bytes, { inspection: fileInspection, profile: pdfAProfile });
+    const pdfA = assessPdfAFile(bytes, { inspection: fileInspection, xmpDocument, profile: pdfAProfile });
     report.pdfA = pdfA;
     for (const rule of pdfA.rules) {
         if (rule.status === 'fail') add('pdf', rule.id, rule.detail, 'error', rule.location);
