@@ -100,8 +100,8 @@ export function makePdfaMaskTransferCases(xml) {
             { transfer: '<< /FunctionType 99 0 R /Domain [0 1] /N 1 >>' }, 'unknown'],
         ['sampled transfer functions are inspected',
             { transfer: '<< /FunctionType 0 /Domain [0 1] /Range [0 1] /Size [2] /BitsPerSample 8 >>', transferStream: true, transferData: '\x00\xFF' }, 'pass'],
-        ['stitching transfer functions remain open',
-            { transfer: '<< /FunctionType 3 /Domain [0 1] /Functions [<< /FunctionType 2 /Domain [0 1] /N 1 >>] /Bounds [] /Encode [0 1] >>' }, 'unknown'],
+        ['stitching transfer functions are inspected',
+            { transfer: '<< /FunctionType 3 /Domain [0 1] /Functions [<< /FunctionType 2 /Domain [0 1] /N 1 >>] /Bounds [] /Encode [0 1] >>' }, 'pass'],
         ['calculator transfer functions remain open',
             { transfer: '<< /FunctionType 4 /Domain [0 1] /Range [0 1] >>', transferStream: true, transferData: '{ dup mul }' }, 'unknown'],
     ];
