@@ -67,6 +67,8 @@ const transparencyRules = [
     { id: 'PDF-TRANSPARENCY-GROUP', specification: PDF_SPEC, clause: '11.6.6', label: 'Struktur und Blendfarbraum von Transparenzgruppen' },
     { id: 'PDF-SOFT-MASK', specification: PDF_SPEC, clause: '7.10.1–7.10.5, 11.6.5',
         label: 'Soft Masks und ihre Transferfunktionen' },
+    { id: 'PDF-JPX-ALPHA', specification: PDF_SPEC + ', ITU-T T.800', clause: '7.4.9, 8.9.5.1 und Anhang I',
+        label: 'JPEG-2000-Header und Zuordnung des eingebetteten Alphakanals' },
     { id: 'PDF-TRANSPARENCY-STATE', specification: PDF_SPEC, clause: '8.4.5, 11.6.4', label: 'Deckkraft und weitere Transparenzparameter' },
 ];
 const xmpRules = [

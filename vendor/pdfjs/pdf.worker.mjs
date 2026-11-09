@@ -20,8 +20,8 @@
  */
 
 /**
- * pdfjsVersion = 6.4.169
- * pdfjsBuild = f86f1c5ff
+ * pdfjsVersion = 6.4.170
+ * pdfjsBuild = 7bd51fb13
  */
 /******/ var __webpack_modules__ = ({
 
@@ -66584,7 +66584,368 @@ function inspectCalculator(bytes, domain) {
   }
 }
 
+;// ./src/core/pdfa_jpx_inspection.js
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const EXTENSIONS = new Set(["jplh", "jclx", "j2cx", "cref", "flst", "jpch", "opct", "pclr", "cmap", "comp", "rreq", "dtbl", "ftbl"]);
+class JpxFinding extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+function pdfa_jpx_inspection_fail(detail) {
+  throw new JpxFinding("fail", detail);
+}
+function pdfa_jpx_inspection_unknown(detail) {
+  throw new JpxFinding("unknown", detail);
+}
+class Jp2HeaderInspection {
+  constructor(bytes) {
+    this.bytes = bytes;
+    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    this.boxCount = 0;
+  }
+  word(offset) {
+    return String.fromCharCode(...this.bytes.subarray(offset, offset + 4));
+  }
+  boxes(start, end, depth = 0) {
+    if (depth > 8) {
+      pdfa_jpx_inspection_unknown("JPEG 2000 box nesting exceeds the inspection limit.");
+    }
+    const boxes = [];
+    for (let offset = start; offset < end;) {
+      if (++this.boxCount > 1024) {
+        pdfa_jpx_inspection_unknown("JPEG 2000 box count exceeds the inspection limit.");
+      }
+      if (end - offset < 8) {
+        pdfa_jpx_inspection_fail("A JPEG 2000 box header is truncated.");
+      }
+      let length = BigInt(this.view.getUint32(offset));
+      let header = 8;
+      if (length === 1n) {
+        if (end - offset < 16) {
+          pdfa_jpx_inspection_fail("An extended JPEG 2000 box header is truncated.");
+        }
+        length = this.view.getBigUint64(offset + 8);
+        header = 16;
+      } else if (length === 0n) {
+        if (depth > 0) {
+          pdfa_jpx_inspection_fail("A zero-length box cannot be contained in the finite JP2 header.");
+        }
+        length = BigInt(end - offset);
+      }
+      if (length < BigInt(header) || length > BigInt(end - offset)) {
+        pdfa_jpx_inspection_fail("A JPEG 2000 box length exceeds its enclosing bytes.");
+      }
+      const next = offset + Number(length);
+      boxes.push({
+        type: this.word(offset + 4),
+        offset,
+        data: offset + header,
+        end: next
+      });
+      offset = next;
+    }
+    return boxes;
+  }
+  one(boxes, type, required = true) {
+    const matches = boxes.filter(box => box.type === type);
+    if (matches.length > 1 || required && !matches.length) {
+      pdfa_jpx_inspection_fail("The JPEG 2000 header has a missing or duplicate " + type + " box.");
+    }
+    return matches[0];
+  }
+  size(box, length) {
+    if (box.end - box.data !== length) {
+      pdfa_jpx_inspection_fail("The " + box.type + " box has an invalid payload length.");
+    }
+  }
+  supported(boxes) {
+    if (boxes.some(box => EXTENSIONS.has(box.type))) {
+      pdfa_jpx_inspection_unknown("JPX layers, palette mappings or extension boxes are outside this inspection.");
+    }
+  }
+  color(boxes) {
+    const colors = boxes.filter(box => box.type === "colr");
+    if (!colors.length) {
+      pdfa_jpx_inspection_fail("The JP2 header has no colour specification box.");
+    }
+    if (colors.length > 32) {
+      pdfa_jpx_inspection_unknown("The colour specification count exceeds the inspection limit.");
+    }
+    let count = null;
+    for (const box of colors) {
+      if (box.end - box.data < 3) {
+        pdfa_jpx_inspection_fail("A colour specification box is truncated.");
+      }
+      const method = this.bytes[box.data];
+      let components = null;
+      if (method === 1) {
+        this.size(box, 7);
+        const enumeration = this.view.getUint32(box.data + 3);
+        components = new Map([[16, 3], [17, 1], [18, 3], [12, 4]]).get(enumeration);
+      } else if (method === 2) {
+        if (box.end - box.data < 3 + 128) {
+          pdfa_jpx_inspection_fail("The JP2 colour profile header is truncated.");
+        }
+        const profile = box.data + 3;
+        if (this.word(profile + 36) !== "acsp") {
+          pdfa_jpx_inspection_unknown("The JP2 colour profile signature could not be established.");
+        }
+        components = new Map([["GRAY", 1], ["RGB ", 3], ["CMYK", 4]]).get(this.word(profile + 16));
+      }
+      if (!components || count && count !== components) {
+        pdfa_jpx_inspection_unknown("The effective JPEG 2000 colour channel count is outside this inspection.");
+      }
+      count = components;
+    }
+    return count;
+  }
+  image(header, children, codestream) {
+    const info = this.one(children, "ihdr");
+    if (children[0] !== info) {
+      pdfa_jpx_inspection_fail("The image header must be the first box inside jp2h.");
+    }
+    this.size(info, 14);
+    const height = this.view.getUint32(info.data);
+    const width = this.view.getUint32(info.data + 4);
+    const count = this.view.getUint16(info.data + 8);
+    const precision = this.bytes[info.data + 10];
+    if (!width || !height || !count || this.bytes[info.data + 11] !== 7) {
+      pdfa_jpx_inspection_fail("The JP2 image dimensions, component count or compression type is invalid.");
+    }
+    if (count > 64) {
+      pdfa_jpx_inspection_unknown("The JPEG 2000 component count exceeds the inspection limit.");
+    }
+    const bpcc = this.one(children, "bpcc", precision === 255);
+    let descriptors;
+    if (precision === 255) {
+      this.size(bpcc, count);
+      descriptors = this.bytes.subarray(bpcc.data, bpcc.end);
+    } else {
+      if (bpcc) {
+        pdfa_jpx_inspection_unknown("A per-component precision box with uniform ihdr precision is outside this inspection.");
+      }
+      descriptors = new Uint8Array(count).fill(precision);
+    }
+    if (Array.from(descriptors).some(value => (value & 127) >= 38)) {
+      pdfa_jpx_inspection_fail("The JPEG 2000 sample precision is outside 1 to 38 bits.");
+    }
+    if (codestream.offset < header.end) {
+      pdfa_jpx_inspection_fail("The codestream appears before the complete JP2 header.");
+    }
+    const start = codestream.data;
+    const length = codestream.end - start;
+    if (length < 42 || this.view.getUint16(start) !== 0xff4f || this.view.getUint16(start + 2) !== 0xff51) {
+      pdfa_jpx_inspection_fail("The first codestream lacks its initial SOC and SIZ markers.");
+    }
+    const sizLength = this.view.getUint16(start + 4);
+    const components = this.view.getUint16(start + 40);
+    if (sizLength !== 38 + 3 * components || 4 + sizLength > length) {
+      pdfa_jpx_inspection_fail("The codestream SIZ marker has an invalid length.");
+    }
+    const x = this.view.getUint32(start + 8);
+    const y = this.view.getUint32(start + 12);
+    const xOrigin = this.view.getUint32(start + 16);
+    const yOrigin = this.view.getUint32(start + 20);
+    if (components !== count || x <= xOrigin || y <= yOrigin || x - xOrigin !== width || y - yOrigin !== height) {
+      pdfa_jpx_inspection_fail("The JP2 image header and codestream dimensions or components disagree.");
+    }
+    if (!this.view.getUint32(start + 24) || !this.view.getUint32(start + 28)) {
+      pdfa_jpx_inspection_fail("The codestream declares an empty tile grid.");
+    }
+    for (let i = 0; i < count; i++) {
+      const field = start + 42 + 3 * i;
+      if (this.bytes[field] !== descriptors[i] || !this.bytes[field + 1] || !this.bytes[field + 2]) {
+        pdfa_jpx_inspection_fail("The JP2 header and SIZ sample descriptors disagree or have invalid sampling.");
+      }
+    }
+    return {
+      count,
+      descriptors
+    };
+  }
+  alpha(box, image, colors) {
+    if (!box) {
+      if (image.count !== colors) {
+        pdfa_jpx_inspection_fail("The JP2 image has auxiliary channels without a channel definition box.");
+      }
+      return null;
+    }
+    const length = box.end - box.data;
+    if (length < 2) {
+      pdfa_jpx_inspection_fail("The channel definition box is truncated.");
+    }
+    const count = this.view.getUint16(box.data);
+    if (!count || length !== 2 + 6 * count) {
+      pdfa_jpx_inspection_fail("The channel definition box has an invalid entry count or length.");
+    }
+    if (count > 256) {
+      pdfa_jpx_inspection_unknown("The channel definition count exceeds the inspection limit.");
+    }
+    const channelTypes = new Map(),
+      associations = new Map();
+    const ordinary = new Set(),
+      alphaChannels = new Set(),
+      alphaColors = new Set();
+    let alphaType = null;
+    for (let i = 0; i < count; i++) {
+      const offset = box.data + 2 + 6 * i;
+      const channel = this.view.getUint16(offset);
+      const type = this.view.getUint16(offset + 2);
+      const association = this.view.getUint16(offset + 4);
+      if (channel >= image.count || ![0, 1, 2, 65535].includes(type)) {
+        pdfa_jpx_inspection_fail("A channel definition index or channel type is invalid.");
+      }
+      if (type === 65535 || association === 65535) {
+        pdfa_jpx_inspection_unknown("An unspecified JPEG 2000 channel cannot establish alpha coverage.");
+      }
+      if (channelTypes.has(channel) && channelTypes.get(channel) !== type) {
+        pdfa_jpx_inspection_unknown("Mixed roles for the same JPEG 2000 channel are outside this inspection.");
+      }
+      channelTypes.set(channel, type);
+      const key = type + "/" + association;
+      if (associations.has(key) && associations.get(key) !== channel) {
+        pdfa_jpx_inspection_fail("Different channels have the same type and colour association.");
+      }
+      associations.set(key, channel);
+      if (association > colors) {
+        pdfa_jpx_inspection_fail("A channel definition refers to a colour outside the declared colour space.");
+      }
+      if (type === 0) {
+        if (!association) {
+          pdfa_jpx_inspection_unknown("The colour channel definitions are ambiguous.");
+        }
+        ordinary.add(association);
+      } else {
+        alphaChannels.add(channel);
+        alphaColors.add(association);
+        alphaType = type;
+        if (image.descriptors[channel] & 128) {
+          pdfa_jpx_inspection_fail("JPEG 2000 opacity must use an unsigned sample component.");
+        }
+      }
+    }
+    if (alphaChannels.size > 1) {
+      pdfa_jpx_inspection_fail("A PDF image with embedded alpha must have exactly one opacity channel.");
+    }
+    if (ordinary.size !== colors || channelTypes.size !== image.count) {
+      pdfa_jpx_inspection_unknown("The channel definitions do not establish the complete direct component mapping.");
+    }
+    if (!alphaChannels.size) {
+      return null;
+    }
+    if (!alphaColors.has(0) && Array.from({
+      length: colors
+    }, (_, i) => i + 1).some(association => !alphaColors.has(association))) {
+      pdfa_jpx_inspection_fail("The opacity channel does not cover all colour channels.");
+    }
+    return alphaType;
+  }
+  inspect(mode) {
+    const boxes = this.boxes(0, this.bytes.length);
+    const signature = this.one(boxes, "jP  ");
+    this.size(signature, 4);
+    if (boxes[0] !== signature || signature.data !== 8 || signature.end !== 12 || this.view.getUint32(signature.data) !== 0x0d0a870a) {
+      pdfa_jpx_inspection_fail("The JP2 signature box is invalid.");
+    }
+    const fileType = this.one(boxes, "ftyp");
+    if (boxes[1] !== fileType || fileType.end - fileType.data < 12 || (fileType.end - fileType.data) % 4) {
+      pdfa_jpx_inspection_fail("The JP2 file type box has an invalid order or length.");
+    }
+    const brands = [];
+    for (let offset = fileType.data; offset < fileType.end; offset += 4) {
+      if (offset !== fileType.data + 4) {
+        brands.push(this.word(offset));
+      }
+    }
+    if (this.word(fileType.data) !== "jp2 " || !brands.includes("jp2 ") || brands.some(brand => brand !== "jp2 ")) {
+      pdfa_jpx_inspection_unknown("JPX brands or other file type extensions are outside this inspection.");
+    }
+    this.supported(boxes);
+    const header = this.one(boxes, "jp2h");
+    const children = this.boxes(header.data, header.end, 1);
+    this.supported(children);
+    const codestreams = boxes.filter(box => box.type === "jp2c");
+    if (!codestreams.length) {
+      pdfa_jpx_inspection_fail("The JP2 file contains no codestream box.");
+    }
+    const image = this.image(header, children, codestreams[0]);
+    const colors = this.color(children);
+    if (mode === 0) {
+      return {
+        status: "pass",
+        transparent: false,
+        detail: "Embedded opacity is ignored by the declared zero alpha mode."
+      };
+    }
+    const type = this.alpha(this.one(children, "cdef", false), image, colors);
+    if (type === null) {
+      return {
+        status: "fail",
+        transparent: false,
+        detail: "The supported JP2 header declares no opacity channel for the requested embedded alpha."
+      };
+    }
+    if (type !== mode) {
+      pdfa_jpx_inspection_unknown("The embedded opacity type and PDF alpha mode require interpretation outside this inspection.");
+    }
+    return {
+      status: "pass",
+      transparent: true,
+      detail: "The original JP2 channel definitions establish one unsigned opacity channel covering all colour channels."
+    };
+  }
+}
+function inspectJpxAlpha(bytes, mode) {
+  try {
+    if (!(bytes instanceof Uint8Array) || bytes.length > 4 * 1024 * 1024) {
+      pdfa_jpx_inspection_unknown("The original JPEG 2000 bytes exceed the supported input limit.");
+    }
+    if (![0, 1, 2].includes(mode)) {
+      pdfa_jpx_inspection_unknown("The embedded alpha mode could not be established.");
+    }
+    if (bytes.length >= 2 && bytes[0] === 255 && bytes[1] === 79) {
+      pdfa_jpx_inspection_unknown("A raw JPEG 2000 codestream does not establish JP2 alpha channel mapping.");
+    }
+    return new Jp2HeaderInspection(bytes).inspect(mode);
+  } catch (error) {
+    if (error instanceof JpxFinding) {
+      return {
+        status: error.status,
+        detail: error.message,
+        transparent: null
+      };
+    }
+    return {
+      status: "unknown",
+      detail: "The original JP2 alpha metadata could not be fully inspected.",
+      transparent: null
+    };
+  }
+}
+
 ;// ./src/core/pdfa_transparency_inspection.js
+
+
 
 
 
@@ -66610,7 +66971,8 @@ const PAGE = "6.2.10-2";
 const GROUP = "PDF-TRANSPARENCY-GROUP";
 const MASK = "PDF-SOFT-MASK";
 const pdfa_transparency_inspection_STATE = "PDF-TRANSPARENCY-STATE";
-const pdfa_transparency_inspection_RULES = [BLEND, PAGE, GROUP, MASK, pdfa_transparency_inspection_STATE];
+const JPX = "PDF-JPX-ALPHA";
+const pdfa_transparency_inspection_RULES = [BLEND, PAGE, GROUP, MASK, pdfa_transparency_inspection_STATE, JPX];
 const pdfa_transparency_inspection_RANK = {
   "not-applicable": 0,
   pass: 1,
@@ -66631,13 +66993,15 @@ class TransparencyInspection {
     this.masks = new Set();
     this.maskImages = new Set();
     this.functionBudget = 8192;
+    this.jpxResults = new Map();
     this.counts = {
       transparentPages: 0,
       annotationAppearances: 0,
       groups: 0,
       graphicsStates: 0,
       softMasks: 0,
-      imageSoftMasks: 0
+      imageSoftMasks: 0,
+      jpxAlphaStreams: 0
     };
   }
   note(id, status, location, detail) {
@@ -67114,36 +67478,94 @@ class TransparencyInspection {
     }
     return host.bytes(stream);
   }
-  async image(dict, resources, path) {
+  async embeddedAlpha(dict, source, path) {
+    const {
+      host
+    } = this;
+    const unknown = this.unresolved;
+    const mode = host.get(dict, "SMaskInData");
+    if (pdfa_transparency_inspection_absent(mode)) {
+      return false;
+    }
+    const filter = host.get(dict, "Filter");
+    const filters = Array.isArray(filter) ? filter : [filter];
+    const resolved = filters.length <= 16 ? filters.map(value => host.resolve(value)) : null;
+    const jpx = resolved?.some(value => isName(value, "JPXDecode") || isName(value, "JPX"));
+    if (!jpx) {
+      if (source instanceof JpxStream || !resolved || resolved.includes(unknown)) {
+        this.note(JPX, "unknown", path, "The image filter could not be established.");
+        return mode === 0 ? false : unknown;
+      }
+      return false;
+    }
+    const status = this.status(mode, mode === 0 || mode === 1 || mode === 2);
+    this.note(MASK, status, path + "/SMaskInData", "The embedded alpha mode must be 0, 1 or 2.");
+    if (status !== "pass") {
+      this.note(JPX, status, path + "/SMaskInData", "The embedded alpha mode is invalid or unresolved.");
+      return unknown;
+    }
+    if (mode === 0) {
+      this.note(JPX, "pass", path + "/SMaskInData", "Embedded alpha channels are explicitly ignored.");
+      return false;
+    }
+    const mask = host.get(dict, "SMask");
+    if (!pdfa_transparency_inspection_absent(mask)) {
+      this.note(MASK, this.status(mask, false), path + "/SMask", "JPX embedded alpha and a separate image soft mask are mutually exclusive.");
+    }
+    if (!(source instanceof JpxStream)) {
+      this.note(JPX, "unknown", path, "The original JPX stream could not be inspected.");
+      return unknown;
+    }
+    if (!this.jpxResults.has(source)) {
+      this.counts.jpxAlphaStreams++;
+      const bytes = await this.jpxBytes(source, resolved);
+      this.jpxResults.set(source, bytes ? inspectJpxAlpha(bytes, mode) : {
+        status: "unknown",
+        detail: "Original JP2 bytes could not be read within the supported filter and byte limits.",
+        transparent: null
+      });
+    }
+    const result = this.jpxResults.get(source);
+    this.note(JPX, result.status, path + "/SMaskInData", result.detail);
+    return result.transparent === null ? unknown : result.transparent;
+  }
+  async jpxBytes(source, filters) {
+    const {
+      host
+    } = this;
+    const dict = source.dict;
+    if (!pdfa_transparency_inspection_absent(host.get(dict, "F")) || !pdfa_transparency_inspection_absent(host.get(dict, "DP")) || !filters.length || filters.length > 2 || !(isName(filters.at(-1), "JPXDecode") || isName(filters.at(-1), "JPX"))) {
+      return null;
+    }
+    const inner = source.stream;
+    if (filters.length === 1) {
+      return inner instanceof Stream ? host.bytes(inner) : null;
+    }
+    if (!(isName(filters[0], "FlateDecode") || isName(filters[0], "Fl")) || !(inner instanceof FlateStream)) {
+      return null;
+    }
+    let parameters = host.get(dict, "DecodeParms");
+    if (Array.isArray(parameters)) {
+      parameters = parameters.length <= 2 ? host.resolve(parameters[0]) : this.unresolved;
+    }
+    if (!pdfa_transparency_inspection_absent(parameters)) {
+      if (!(parameters instanceof Dict)) {
+        return null;
+      }
+      const predictor = host.get(parameters, "Predictor");
+      if (!pdfa_transparency_inspection_absent(predictor) && predictor !== 1) {
+        return null;
+      }
+    }
+    return host.bytes(inner);
+  }
+  async image(dict, resources, path, source = null) {
     const {
       host
     } = this;
     const unknown = this.unresolved;
     const mask = host.get(dict, "SMask");
-    const inData = host.get(dict, "SMaskInData");
-    let embedded = false;
-    if (!pdfa_transparency_inspection_absent(inData)) {
-      const modeStatus = this.status(inData, inData === 0 || inData === 1 || inData === 2);
-      if (modeStatus !== "pass") {
-        this.note(MASK, modeStatus, path + "/SMaskInData", "The embedded alpha mode must be 0, 1 or 2.");
-        embedded = unknown;
-      } else if (inData !== 0) {
-        const filter = host.get(dict, "Filter");
-        const filters = Array.isArray(filter) ? filter : [filter];
-        const resolved = filters.length <= 16 ? filters.map(value => host.resolve(value)) : null;
-        const jpx = resolved?.some(value => isName(value, "JPXDecode"));
-        if (jpx || !resolved || resolved.includes(unknown)) {
-          embedded = unknown;
-          if (jpx && !pdfa_transparency_inspection_absent(mask) && mask !== unknown) {
-            this.note(MASK, "fail", path + "/SMask", "JPX embedded alpha and a separate image soft mask are mutually exclusive.");
-          } else {
-            this.note(MASK, "unknown", path + "/SMaskInData", "Encoded alpha samples or the image filter could not be verified.");
-          }
-        }
-      } else {
-        this.note(MASK, "pass", path + "/SMaskInData", "Encoded alpha samples are explicitly ignored.");
-      }
-    }
+    const embedded = await this.embeddedAlpha(dict, source, path);
     if (pdfa_transparency_inspection_absent(mask)) {
       return embedded;
     }
@@ -67729,7 +68151,7 @@ class ColorInspection {
     const type = this.get(obj.dict, "Subtype");
     if (isName(type, "Image")) {
       const mask = this.get(obj.dict, "ImageMask");
-      const ownMask = await this.transparency.image(obj.dict, resources, path);
+      const ownMask = await this.transparency.image(obj.dict, resources, path, obj);
       const hardMask = this.get(obj.dict, "Mask");
       this.useTransparency(ownMask, path);
       if (hardMask === pdfa_color_inspection_UNKNOWN) {
@@ -75941,7 +76363,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "6.4.169";
+    const workerVersion = "6.4.170";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }

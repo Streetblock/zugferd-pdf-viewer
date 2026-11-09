@@ -19,6 +19,7 @@ import { makePdfaMaskTransferCases, makePdfaMaskTransferFixture } from '../tests
 import { makePdfaMaskSampledCases, makePdfaMaskSampledFixture } from '../tests/pdfa-mask-sampled-cases.mjs';
 import { makePdfaMaskStitchingCases, makePdfaMaskStitchingFixture } from '../tests/pdfa-mask-stitching-cases.mjs';
 import { makePdfaMaskCalculatorCases, makePdfaMaskCalculatorFixture } from '../tests/pdfa-mask-calculator-cases.mjs';
+import { makePdfaJpxAlphaCases, makePdfaJpxAlphaFixture } from '../tests/pdfa-jpx-alpha-cases.mjs';
 import { sha256, validatePdfA } from '../src/pdfa-validation.mjs';
 const fork = process.argv[2];
 const executablePath = process.argv[3] || process.env.PDFJS_TEST_BROWSER;
@@ -83,6 +84,11 @@ const cases = [
         'unknown', 'pass', 'pass'],
     ['invalid-type4-mask-transfer.pdf', makePdfaMaskCalculatorFixture(xml, { code: '{ add }' }),
         'fail', 'pass', 'pass', 'PDF-SOFT-MASK'],
+    ['jp2-alpha.pdf', makePdfaJpxAlphaFixture(xml), 'unknown', 'pass', 'pass'],
+    ['uncalibrated-jp2-alpha.pdf', makePdfaJpxAlphaFixture(xml, { pageGroup: false }),
+        'fail', 'pass', 'pass', '6.2.10-2'],
+    ['missing-jp2-alpha.pdf', makePdfaJpxAlphaFixture(xml, { sample: 'rgb' }),
+        'fail', 'pass', 'pass', 'PDF-JPX-ALPHA'],
     ['invoice.xml', new TextEncoder().encode(xml), 'pass', null, null],
 ];
 const server = createServer();
@@ -175,6 +181,12 @@ try {
                 assert.equal(finding.status, pdfaFailure ? 'fail' : 'pass');
                 assert.match(finding.location, /\/TR(?:\/|$)/);
             }
+            if (name === 'jp2-alpha.pdf') {
+                const pdfa = report.pdfValidation.pdfA;
+                assert.equal(pdfa.rules.find(rule => rule.id === 'PDF-JPX-ALPHA').status, 'pass');
+                assert.equal(pdfa.rules.find(rule => rule.id === '6.2.10-2').status, 'pass');
+                assert.equal(pdfa.transparencyCounts.jpxAlphaStreams, 1);
+            }
             if (name === 'document-objects.pdf') {
                 assert.equal(report.pdfValidation.pdfA.documentCounts.pages, 2);
                 for (const id of ['PDF-CATALOG', 'PDF-PAGE-TREE', '6.3.1-1', '6.5.1-1']) {
@@ -203,6 +215,7 @@ try {
         ...makePdfaMaskSampledCases(xml),
         ...makePdfaMaskStitchingCases(xml),
         ...makePdfaMaskCalculatorCases(xml),
+        ...makePdfaJpxAlphaCases(xml),
     ];
     for (const { name, bytes } of standaloneCases) {
         const inBrowser = await page.evaluate(async input => {

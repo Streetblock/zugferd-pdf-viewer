@@ -392,10 +392,29 @@ allein nicht. Der Worker untersucht Soft-Mask-Dictionaries mit /Alpha oder
 der Inhalt der Form der Maskenform. Bei einer Bildmaske dient deren Grau der
 Maske. Diese Werte zählt die Farbprüfung nicht als sichtbare Gerätefarben.
 Der JSON-Bericht enthält transparencyCounts. Die Prüfung lässt unter anderem
-JPEG-2000-Alphadaten, nicht abschließend bewertbare Rechnerfunktionen sowie Transparenz in Mustern,
+JPEG-2000-Pixelprüfungen, nicht abschließend bewertbare Rechnerfunktionen sowie Transparenz in Mustern,
 Inline-Bildern und Type-3-Glyphen offen. Die Prüfung
 arbeitet auf PDF-Objekten und Grafikoperatoren. Pixel und ICC-Transformationen
 sind außerhalb dieses Prüfumfangs.
+
+Bei JPEG-2000-Bildern prüft der Worker für /SMaskInData 1 oder 2 die originalen
+JP2-Header, Kanalbeschreibungen und den SIZ-Marker des ersten Codestreams.
+Ein einzelner vorzeichenloser Alphakanal muss alle Farbkanäle abdecken.
+Die Prüfung akzeptiert auch mehrere Zuordnungen desselben Alphakanals.
+Modus 0 und der fehlende Eintrag ignorieren die eingebettete Deckkraft.
+Ein positiver Alpha-Modus darf keinen zusätzlichen /SMask-Eintrag haben.
+Nachgewiesene Bildtransparenz fließt in die Prüfung des Seiten-Blendfarbraums
+ein. Die Befunde tragen die Kennung PDF-JPX-ALPHA, der Bericht zählt
+untersuchte Streams unter transparencyCounts.jpxAlphaStreams.
+Unterstützt sind direktes JPXDecode und eine vorgeschaltete Flate-Dekompression
+mit neutralen DecodeParms. Paletten, abweichende Kanalabbildungen, JPX-Ebenen,
+uneindeutige Alpha-Modi und überschrittene Prüfgrenzen bleiben offen.
+Bestätigt wird die deklarierte Header- und Kanalstruktur. Die vollständige
+Codestream- und Pixelprüfung, tatsächliche Vormultiplikation und die
+Übereinstimmung der PDF-Farbraumangabe mit den kodierten Farbdaten bleiben
+offen.
+[ISO 32000-1, Abschnitt 7.4.9 und Tabelle 89](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf),
+[ITU-T T.800, Anhang I](https://www.itu.int/rec/T-REC-T.800/en)
 
 Bei einer Masken-Transferfunktion unter /TR untersucht der Worker Typ 2
 anhand der originalen Funktionsparameter. Er prüft genau einen Eingang und
@@ -535,6 +554,14 @@ Ungültige Syntax, falsche Operanden- und Ergebnistypen, Stackfehler und
 eindeutige Rechenfehler blieben in diesem Referenzlauf ohne entsprechenden
 Befund. Die lokalen Befunde beruhen auf den Anforderungen aus
 ISO 32000-1, Abschnitt 7.10.5 und Tabelle 42.
+Die JP2-Testbilder wurden mit Pillow/OpenJPEG verlustfrei erzeugt und vor
+dem Einbetten als Base64 auf ihre Pixel zurückgeprüft. Die Laufzeitprüfung
+verwendet den lokalen JavaScript-Worker. veraPDF 1.30.2 bestätigte die
+normalen RGBA-Beispiele und den Fehler bei fehlendem Seiten-Blendfarbraum.
+Bei Grau plus Alpha und Flate-verpacktem JP2 meldete die Referenz zusätzliche
+Farbregelfehler. Viele gezielt beschädigte Kanaldefinitionen, abgeschnittene
+Codestream-Boxen und widersprüchliche Bildmaße blieben dort ohne Befund.
+Diese Unterschiede sind durch die gemeinsamen Node-/Browser-Fälle erfasst.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)
