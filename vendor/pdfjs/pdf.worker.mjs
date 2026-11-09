@@ -20,8 +20,8 @@
  */
 
 /**
- * pdfjsVersion = 6.4.164
- * pdfjsBuild = 1ed51d8dc
+ * pdfjsVersion = 6.4.165
+ * pdfjsBuild = f8aaad2ef
  */
 /******/ var __webpack_modules__ = ({
 
@@ -66120,6 +66120,7 @@ class TransparencyInspection {
     this.maskImages = new Set();
     this.counts = {
       transparentPages: 0,
+      annotationAppearances: 0,
       groups: 0,
       graphicsStates: 0,
       softMasks: 0,
@@ -66660,15 +66661,16 @@ class ColorInspection {
       this.note(id, "unknown", path, detail);
     }
   }
-  useTransparency(evidence) {
+  useTransparency(evidence, path) {
     if (this.pageUse && this.pageUse.transparent !== true && evidence !== false) {
       this.pageUse.transparent = evidence;
+      this.pageUse.location = path;
     }
   }
   unavailable(path, detail) {
     this.unknown(path, detail);
     this.transparency.unknown(path, detail, !this.pageUse);
-    this.useTransparency(pdfa_color_inspection_UNKNOWN);
+    this.useTransparency(pdfa_color_inspection_UNKNOWN, path);
   }
   take(path, depth) {
     if (depth <= pdfa_color_inspection_MAX_DEPTH && this.items-- > 0) {
@@ -66964,9 +66966,9 @@ class ColorInspection {
     const mask = ownMask ? false : state.mask;
     const activeMask = !!mask && mask !== pdfa_color_inspection_UNKNOWN;
     if (state.blend === true || typeof alpha === "number" && alpha < 1 || activeMask) {
-      this.useTransparency(true);
+      this.useTransparency(true, path);
     } else if (state.blend === pdfa_color_inspection_UNKNOWN || alpha === pdfa_color_inspection_UNKNOWN || mask === pdfa_color_inspection_UNKNOWN) {
-      this.useTransparency(pdfa_color_inspection_UNKNOWN);
+      this.useTransparency(pdfa_color_inspection_UNKNOWN, path);
     }
     if (!activeMask) {
       return;
@@ -66997,9 +66999,9 @@ class ColorInspection {
       const mask = this.get(obj.dict, "ImageMask");
       const ownMask = await this.transparency.image(obj.dict, resources, path);
       const hardMask = this.get(obj.dict, "Mask");
-      this.useTransparency(ownMask);
+      this.useTransparency(ownMask, path);
       if (hardMask === pdfa_color_inspection_UNKNOWN) {
-        this.useTransparency(pdfa_color_inspection_UNKNOWN);
+        this.useTransparency(pdfa_color_inspection_UNKNOWN, path);
       }
       const overrides = ownMask !== false || hardMask === pdfa_color_inspection_UNKNOWN || hardMask instanceof BaseStream || Array.isArray(hardMask);
       await this.composite(state, "fill", path, depth, overrides);
@@ -67012,12 +67014,17 @@ class ColorInspection {
       }
       return;
     }
-    if (!isName(type, "Form") || !pdfa_color_inspection_absent(this.get(obj.dict, "Ref")) || this.forms.has(obj) || !this.take(path, depth)) {
+    await this.form(obj, type, state, path, depth);
+  }
+  async form(obj, type, state, path, depth) {
+    const appearance = state === null;
+    if (!isName(type, "Form") && !(appearance && pdfa_color_inspection_absent(type)) || !pdfa_color_inspection_absent(this.get(obj.dict, "Ref")) || this.forms.has(obj) || !this.take(path, depth)) {
       this.unavailable(path, "The invoked Form is cyclic, external or unsupported.");
       return;
     }
     const entry = this.get(obj.dict, "Resources");
-    const local = pdfa_color_inspection_absent(entry) ? state.pageResources : entry;
+    const local = pdfa_color_inspection_absent(entry) ? state?.pageResources : entry;
+    state ??= this.initialState(local, null);
     await this.resources(local, pdfa_color_inspection_at(path, "Resources"));
     this.forms.add(obj);
     try {
@@ -67033,7 +67040,7 @@ class ColorInspection {
         maskSubtype: null
       };
       if (group.status !== "absent") {
-        this.useTransparency(group.status === "pass" ? true : pdfa_color_inspection_UNKNOWN);
+        this.useTransparency(group.status === "pass" ? true : pdfa_color_inspection_UNKNOWN, path);
         await this.composite(state, "fill", path, depth);
         Object.assign(child, OPAQUE);
         if (group.hasColor === true && !state.ignoreColors) {
@@ -67042,6 +67049,9 @@ class ColorInspection {
       }
       const bytes = await this.bytes(obj);
       if (bytes) {
+        if (appearance) {
+          this.transparency.counts.annotationAppearances++;
+        }
         await this.content(bytes, local, child, path, depth);
       } else {
         this.unavailable(path, "Form content could not be read.");
@@ -67220,6 +67230,7 @@ class ColorInspection {
     this.counts.pages++;
     this.pageUse = {
       transparent: false,
+      location: null,
       masks: new Set()
     };
     try {
@@ -67228,20 +67239,105 @@ class ColorInspection {
         await this.paint(group.color, pdfa_color_inspection_at(path, "Group/CS"));
       }
       await this.pageContents(node, resources, path, depth);
-      this.transparency.page(group, this.pageUse.transparent, this.output, path);
+      await this.annotations(node, pdfa_color_inspection_at(path, "Annots"), depth + 1);
+      this.transparency.page(group, this.pageUse.transparent, this.output, this.pageUse.location ?? path);
     } finally {
       this.pageUse = null;
     }
   }
+  initialState(resources, pageResources = resources) {
+    const gray = {
+      device: pdfa_color_inspection_DEVICES.get("DeviceGray"),
+      resources
+    };
+    return {
+      ...OPAQUE,
+      fill: gray,
+      stroke: gray,
+      mode: 0,
+      font: null,
+      pageResources
+    };
+  }
+  isButtonWidget(annotation) {
+    if (!isName(this.get(annotation, "Subtype"), "Widget")) {
+      return false;
+    }
+    let field = annotation;
+    for (let depth = 0; field instanceof Dict && depth <= pdfa_color_inspection_MAX_DEPTH; depth++) {
+      const type = this.get(field, "FT");
+      if (!pdfa_color_inspection_absent(type)) {
+        return isName(type, "Btn");
+      }
+      field = this.get(field, "Parent");
+    }
+    return false;
+  }
+  async appearance(raw, path, depth) {
+    const stream = this.resolve(raw);
+    if (!(stream instanceof BaseStream)) {
+      this.unavailable(path, "The normal annotation appearance is not a readable stream.");
+      return;
+    }
+    await this.form(stream, this.get(stream.dict, "Subtype"), null, path, depth);
+  }
+  async annotation(annotation, path, depth) {
+    if (!(annotation instanceof Dict)) {
+      this.unavailable(path, "The annotation dictionary could not be read.");
+      return;
+    }
+    const ap = this.get(annotation, "AP");
+    if (pdfa_color_inspection_absent(ap)) {
+      if (!pdfa_color_inspection_absent(this.get(annotation, "CA")) || !pdfa_color_inspection_absent(this.get(annotation, "C")) || !pdfa_color_inspection_absent(this.get(annotation, "IC"))) {
+        this.unavailable(path, "The annotation has no stored appearance to inspect.");
+      }
+      return;
+    }
+    path = pdfa_color_inspection_at(path, "AP");
+    if (!(ap instanceof Dict)) {
+      this.unavailable(path, "The annotation appearance dictionary could not be read.");
+      return;
+    }
+    const normal = this.get(ap, "N");
+    path = pdfa_color_inspection_at(path, "N");
+    if (!(normal instanceof Dict)) {
+      await this.appearance(normal, path, depth + 1);
+      return;
+    }
+    const selected = this.get(annotation, "AS");
+    if (!this.isButtonWidget(annotation) || !(selected instanceof Name) || !(this.get(normal, selected.name) instanceof BaseStream)) {
+      this.unavailable(path, "A normal button appearance state could not be established.");
+      return;
+    }
+    let states = 0;
+    for (const [name, raw] of normal.getRawEntries()) {
+      if (++states > MAX_ITEMS || this.items <= 0) {
+        this.unavailable(path, "The appearance state inspection reached its limit.");
+        return;
+      }
+      await this.appearance(raw, pdfa_color_inspection_at(path, name), depth + 1);
+    }
+  }
+  async annotations(node, path, depth) {
+    const entries = this.get(node, "Annots");
+    if (pdfa_color_inspection_absent(entries)) {
+      return;
+    }
+    if (!Array.isArray(entries) || entries.length > MAX_ITEMS) {
+      this.unavailable(path, "The page annotations could not be fully read.");
+      return;
+    }
+    for (let i = 0; i < entries.length; i++) {
+      const location = path + "[" + i + "]";
+      if (!this.take(location, depth)) {
+        this.unavailable(location, "The annotation inspection reached its limit.");
+        return;
+      }
+      await this.annotation(this.resolve(entries[i]), location, depth);
+    }
+  }
   async pageContents(node, resources, path, depth) {
     await this.resources(resources, pdfa_color_inspection_at(path, "Resources"));
-    const annotations = this.get(node, "Annots");
-    if (!pdfa_color_inspection_absent(annotations) && (!Array.isArray(annotations) || annotations.length > MAX_ITEMS || annotations.some(rawAnnot => {
-      const annotation = this.resolve(rawAnnot);
-      return !(annotation instanceof Dict) || !pdfa_color_inspection_absent(this.get(annotation, "AP")) || !pdfa_color_inspection_absent(this.get(annotation, "CA")) || !pdfa_color_inspection_absent(this.get(annotation, "C"));
-    }))) {
-      this.unavailable(pdfa_color_inspection_at(path, "Annots"), "Annotation appearances are outside this inspection.");
-    }
     const contents = this.get(node, "Contents");
     if (pdfa_color_inspection_absent(contents)) {
       return;
@@ -67269,18 +67365,7 @@ class ColorInspection {
         offset += bytes.length;
       }
     }
-    const gray = {
-      device: pdfa_color_inspection_DEVICES.get("DeviceGray"),
-      resources
-    };
-    await this.content(combined, resources, {
-      ...OPAQUE,
-      fill: gray,
-      stroke: gray,
-      mode: 0,
-      font: null,
-      pageResources: resources
-    }, pdfa_color_inspection_at(path, "Contents"), depth);
+    await this.content(combined, resources, this.initialState(resources), pdfa_color_inspection_at(path, "Contents"), depth);
   }
   finish() {
     return {
@@ -75124,7 +75209,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "6.4.164";
+    const workerVersion = "6.4.165";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }

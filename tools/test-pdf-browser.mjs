@@ -14,6 +14,7 @@ import { makePdfaEmbeddingCases } from '../tests/pdfa-embedding-cases.mjs';
 import { makePdfaFontCases, makePdfaFontFixture } from '../tests/pdfa-font-cases.mjs';
 import { makePdfaColorCases, makePdfaColorFixture } from '../tests/pdfa-color-cases.mjs';
 import { makePdfaTransparencyCases, makePdfaTransparencyFixture } from '../tests/pdfa-transparency-cases.mjs';
+import { makePdfaAnnotationTransparencyCases, makePdfaAnnotationTransparencyFixture } from '../tests/pdfa-annotation-transparency-cases.mjs';
 import { sha256, validatePdfA } from '../src/pdfa-validation.mjs';
 const fork = process.argv[2];
 const executablePath = process.argv[3] || process.env.PDFJS_TEST_BROWSER;
@@ -58,6 +59,10 @@ const cases = [
         'unknown', 'pass', 'pass'],
     ['missing-mask-group.pdf', makePdfaTransparencyFixture(xml, { graphicsState: '/SMask << /S /Alpha >>', pageGroup: true }),
         'fail', 'pass', 'pass', 'PDF-SOFT-MASK'],
+    ['calibrated-stamp.pdf', makePdfaAnnotationTransparencyFixture(xml, { appearanceState: '/ca 0.5', pageGroup: true }),
+        'unknown', 'pass', 'pass'],
+    ['uncalibrated-stamp.pdf', makePdfaAnnotationTransparencyFixture(xml, { appearanceState: '/ca 0.5' }),
+        'fail', 'pass', 'pass', '6.2.10-2'],
     ['invoice.xml', new TextEncoder().encode(xml), 'pass', null, null],
 ];
 const server = createServer();
@@ -123,6 +128,13 @@ try {
                 assert.equal(report.pdfValidation.pdfA.rules.find(rule => rule.id === 'PDF-SOFT-MASK').status, 'pass');
                 assert.equal(report.pdfValidation.pdfA.transparencyCounts.imageSoftMasks, 1);
             }
+            if (name === 'calibrated-stamp.pdf' || name === 'uncalibrated-stamp.pdf') {
+                const pdfa = report.pdfValidation.pdfA;
+                assert.equal(pdfa.transparencyCounts.annotationAppearances, 1);
+                const finding = pdfa.rules.find(rule => rule.id === '6.2.10-2');
+                assert.equal(finding.status, pdfaFailure ? 'fail' : 'pass');
+                assert.match(finding.location, /\/Annots\[0\]\/AP\/N(?:\/|$)/);
+            }
             if (name === 'document-objects.pdf') {
                 assert.equal(report.pdfValidation.pdfA.documentCounts.pages, 2);
                 for (const id of ['PDF-CATALOG', 'PDF-PAGE-TREE', '6.3.1-1', '6.5.1-1']) {
@@ -146,6 +158,7 @@ try {
         ...makePdfaFontCases(xml),
         ...makePdfaColorCases(xml),
         ...makePdfaTransparencyCases(xml),
+        ...makePdfaAnnotationTransparencyCases(xml),
     ];
     for (const { name, bytes } of standaloneCases) {
         const inBrowser = await page.evaluate(async input => {

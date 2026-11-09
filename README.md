@@ -380,7 +380,7 @@ ICCBased-Farbräumen. Bei mehreren Output Intents wird der Verweis auf den
 gemeinsamen Profilstream geprüft. Der JSON-Bericht enthält colorCounts.
 ICC-Transformationen und weitere ICC-Anforderungen bleiben offen. Das gilt
 auch für Farbnutzung in Mustern, Schattierungen, Inline-Bildern, Type-3-Glyphen
-und Anmerkungsdarstellungen.
+und vom Viewer erzeugten Anmerkungsdarstellungen.
 
 Die Transparenzprüfung verfolgt die tatsächlich verwendeten Grafikzustände
 auf Seiten und in aufgerufenen Form-XObjects. Sie berücksichtigt die Reihenfolge
@@ -393,9 +393,21 @@ der Inhalt der Form der Maskenform. Bei einer Bildmaske dient deren Grau der
 Maske. Diese Werte zählt die Farbprüfung nicht als sichtbare Gerätefarben.
 Der JSON-Bericht enthält transparencyCounts. Die Prüfung lässt unter anderem
 JPEG-2000-Alphadaten, Masken-Transferfunktionen und Transparenz in Mustern,
-Inline-Bildern, Type-3-Glyphen und Anmerkungsdarstellungen offen. Die Prüfung
+Inline-Bildern und Type-3-Glyphen offen. Die Prüfung
 arbeitet auf PDF-Objekten und Grafikoperatoren. Pixel und ICC-Transformationen
 sind außerhalb dieses Prüfumfangs.
+
+Für Anmerkungen untersucht der Worker die gespeicherte Normaldarstellung
+unter /AP /N mit eigenem Grafikzustand und eigenen Ressourcen. Eine
+Schaltfläche mit gültigem /AS wird in allen gespeicherten Normalzuständen
+geprüft, da auch der momentan inaktive Zustand angezeigt oder gedruckt
+werden kann. Bei einer gespeicherten Darstellung kommt die Deckkraft aus
+ihrem Grafikzustand. Das /CA der Anmerkung spielt dabei keine Rolle.
+Fehlende oder nicht auflösbare Zustände und vom Viewer erzeugte Darstellungen
+mit Farbangaben oder Deckkraft können offen bleiben. Der Bericht zählt
+gelesene Anmerkungsstreams unter transparencyCounts.annotationAppearances.
+Die Regeln zur Struktur des Appearance-Wörterbuchs bleiben separat.
+[ISO 32000-1, Abschnitt 12.5.5 und Tabelle 170](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf)
 
 ### PDF.js aktualisieren
 
@@ -441,6 +453,11 @@ als erstem Eintrag und bei einer vom Bild überschriebenen Soft Mask eine
 fehlende Seitenkalibrierung. Ungültige spätere Blend-Einträge blieben dort
 ohne Befund. Die lokale Prüfung folgt der Auswahlreihenfolge nach
 ISO 32000-1 §11.6.3 und dem Maskenvorrang nach §11.6.4.3.
+Bei Anmerkungen bestätigte veraPDF 1.30.2 die Befunde für deckende und
+transparente Stempel und für die inaktive Normaldarstellung einer
+Schaltfläche. Bei fehlendem oder ungültigem /AS prüfte die Referenz auch die
+übrigen Zustände und meldete im Test fehlende Seitenkalibrierung. Der lokale
+Worker lässt die Transparenzprüfung dieser Darstellung in dem Fall offen.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)
