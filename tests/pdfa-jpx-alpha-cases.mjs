@@ -13,6 +13,10 @@ const samples = {
 const calRgb = '[/CalRGB << /WhitePoint [0.95047 1 1.08883] >>]';
 const calGray = '[/CalGray << /WhitePoint [0.95047 1 1.08883] >>]';
 
+export function jpxAlphaSampleBytes(sample = 'rgba') {
+    return Buffer.from(samples[sample]);
+}
+
 function box(type, payload) {
     const header = Buffer.alloc(8);
     header.writeUInt32BE(payload.length + 8);
@@ -60,7 +64,7 @@ function stream(data, dictionary = '') {
 
 export function makePdfaJpxAlphaFixture(xml, {
     sample = 'rgba', data = samples[sample], mode = '1', pageGroup = true,
-    filter = '/JPXDecode', compressed = false, imageEntries = '', extraObjects = [],
+    filter = '/JPXDecode', compressed = false, imageEntries = '', extraObjects = [], width = 1, height = 1,
 } = {}) {
     const colorSpace = sample === 'la' ? calGray : calRgb;
     const payload = compressed ? deflateSync(data) : data;
@@ -69,7 +73,7 @@ export function makePdfaJpxAlphaFixture(xml, {
         [3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /XObject << /Im 17 0 R >> >> /Contents 16 0 R
             ${pageGroup ? `/Group << /S /Transparency /CS ${calRgb} >>` : ''} >>`],
         [16, stream('/Im Do')],
-        [17, stream(payload, `/Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace ${colorSpace}
+        [17, stream(payload, `/Type /XObject /Subtype /Image /Width ${width} /Height ${height} /BitsPerComponent 8 /ColorSpace ${colorSpace}
             ${streamFilter ? '/Filter ' + streamFilter : ''} ${mode === null ? '' : '/SMaskInData ' + mode} ${imageEntries}`)],
         ...extraObjects,
     ]);

@@ -20,8 +20,8 @@
  */
 
 /**
- * pdfjsVersion = 6.4.170
- * pdfjsBuild = 7bd51fb13
+ * pdfjsVersion = 6.4.171
+ * pdfjsBuild = bb544b02a
  */
 /******/ var __webpack_modules__ = ({
 
@@ -66860,7 +66860,7 @@ class Jp2HeaderInspection {
     }
     return alphaType;
   }
-  inspect(mode) {
+  header() {
     const boxes = this.boxes(0, this.bytes.length);
     const signature = this.one(boxes, "jP  ");
     this.size(signature, 4);
@@ -66889,6 +66889,17 @@ class Jp2HeaderInspection {
       pdfa_jpx_inspection_fail("The JP2 file contains no codestream box.");
     }
     const image = this.image(header, children, codestreams[0]);
+    return {
+      children,
+      image,
+      codestream: codestreams[0]
+    };
+  }
+  inspect(mode) {
+    const {
+      children,
+      image
+    } = this.header();
     const colors = this.color(children);
     if (mode === 0) {
       return {
@@ -66915,18 +66926,38 @@ class Jp2HeaderInspection {
     };
   }
 }
+function headerInspection(bytes) {
+  if (!(bytes instanceof Uint8Array) || bytes.length > 4 * 1024 * 1024) {
+    pdfa_jpx_inspection_unknown("The original JPEG 2000 bytes exceed the supported input limit.");
+  }
+  if (bytes.length >= 2 && bytes[0] === 255 && bytes[1] === 79) {
+    pdfa_jpx_inspection_unknown("A raw JPEG 2000 codestream is outside the supported JP2 wrapper inspection.");
+  }
+  return new Jp2HeaderInspection(bytes);
+}
+function getJpxCodestream(bytes) {
+  try {
+    const {
+      codestream
+    } = headerInspection(bytes).header();
+    return {
+      status: "pass",
+      detail: "The first original JP2 codestream is bounded by its container.",
+      bytes: bytes.subarray(codestream.data, codestream.end)
+    };
+  } catch (error) {
+    return {
+      status: error instanceof JpxFinding ? error.status : "unknown",
+      detail: error instanceof JpxFinding ? error.message : "The original JP2 codestream boundaries could not be established."
+    };
+  }
+}
 function inspectJpxAlpha(bytes, mode) {
   try {
-    if (!(bytes instanceof Uint8Array) || bytes.length > 4 * 1024 * 1024) {
-      pdfa_jpx_inspection_unknown("The original JPEG 2000 bytes exceed the supported input limit.");
-    }
     if (![0, 1, 2].includes(mode)) {
       pdfa_jpx_inspection_unknown("The embedded alpha mode could not be established.");
     }
-    if (bytes.length >= 2 && bytes[0] === 255 && bytes[1] === 79) {
-      pdfa_jpx_inspection_unknown("A raw JPEG 2000 codestream does not establish JP2 alpha channel mapping.");
-    }
-    return new Jp2HeaderInspection(bytes).inspect(mode);
+    return headerInspection(bytes).inspect(mode);
   } catch (error) {
     if (error instanceof JpxFinding) {
       return {
@@ -66943,7 +66974,435 @@ function inspectJpxAlpha(bytes, mode) {
   }
 }
 
+;// ./src/core/pdfa_jpx_codestream_inspection.js
+
+
+
+
+
+
+
+
+
+
+
+const SOC = 0xff4f,
+  SIZ = 0xff51,
+  COD = 0xff52,
+  COC = 0xff53;
+const QCD = 0xff5c,
+  QCC = 0xff5d,
+  RGN = 0xff5e,
+  COM = 0xff64;
+const SOT = 0xff90,
+  SOD = 0xff93,
+  EOC = 0xffd9;
+const OPTIONAL = new Map([[0xff55, 4], [0xff57, 3], [0xff58, 3], [0xff5f, 9], [0xff60, 3], [0xff61, 3], [0xff63, 2]]);
+const MAIN_ONLY = new Set([0xff55, 0xff57, 0xff60, 0xff63]);
+const TILE_ONLY = new Set([0xff58, 0xff61]);
+const LATER_PART = new Set([0xff58, 0xff5f, 0xff61, COM]);
+class CodestreamFinding extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+function pdfa_jpx_codestream_inspection_fail(detail) {
+  throw new CodestreamFinding("fail", detail);
+}
+function pdfa_jpx_codestream_inspection_unknown(detail) {
+  throw new CodestreamFinding("unknown", detail);
+}
+class CodestreamInspection {
+  constructor(bytes) {
+    this.bytes = bytes;
+    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    this.counts = {
+      headerSegments: 0,
+      tileParts: 0,
+      tiles: 0
+    };
+    this.tiles = new Map();
+    this.pending = null;
+    this.main = null;
+    this.packedMain = false;
+    this.packedTile = false;
+  }
+  marker(offset) {
+    if (offset < 0 || offset + 2 > this.bytes.length) {
+      pdfa_jpx_codestream_inspection_fail("A codestream marker is truncated.");
+    }
+    if (this.bytes[offset] !== 255) {
+      pdfa_jpx_codestream_inspection_fail("A header or declared tile-part boundary does not begin with a marker.");
+    }
+    return this.view.getUint16(offset);
+  }
+  segment(offset) {
+    if (++this.counts.headerSegments > 8192) {
+      pdfa_jpx_codestream_inspection_unknown("The codestream header segment count exceeds the inspection limit.");
+    }
+    if (offset + 4 > this.bytes.length) {
+      pdfa_jpx_codestream_inspection_fail("A marker segment length is truncated.");
+    }
+    const length = this.view.getUint16(offset + 2);
+    const end = offset + 2 + length;
+    if (length < 2 || end > this.bytes.length) {
+      pdfa_jpx_codestream_inspection_fail("A marker segment exceeds the original codestream bytes.");
+    }
+    return {
+      data: offset + 4,
+      length,
+      end
+    };
+  }
+  exact(segment, length) {
+    if (segment.length !== length) {
+      pdfa_jpx_codestream_inspection_fail("A codestream marker segment has an invalid declared length.");
+    }
+  }
+  minimum(segment, length) {
+    if (segment.length < length) {
+      pdfa_jpx_codestream_inspection_fail("A codestream marker segment is too short.");
+    }
+  }
+  component(segment) {
+    const size = this.components < 257 ? 1 : 2;
+    this.minimum(segment, 2 + size);
+    const index = size === 1 ? this.bytes[segment.data] : this.view.getUint16(segment.data);
+    if (index >= this.components) {
+      pdfa_jpx_codestream_inspection_fail("A marker segment refers to a component outside SIZ.");
+    }
+    return {
+      index,
+      size
+    };
+  }
+  coding(segment, component = false) {
+    const prefix = component ? this.component(segment).size : 0;
+    const minimum = component ? 8 + prefix : 12;
+    this.minimum(segment, minimum);
+    const start = segment.data + prefix;
+    const flags = this.bytes[start];
+    if (flags & ~(component ? 1 : 7)) {
+      pdfa_jpx_codestream_inspection_fail("The coding style has reserved flags outside the supported Part 1 syntax.");
+    }
+    const data = start + (component ? 1 : 5);
+    const levels = this.bytes[data];
+    const width = this.bytes[data + 1],
+      height = this.bytes[data + 2];
+    const style = this.bytes[data + 3],
+      wavelet = this.bytes[data + 4];
+    if (levels > 32 || width > 8 || height > 8 || width + height > 8 || wavelet > 1) {
+      pdfa_jpx_codestream_inspection_fail("The coding style declares invalid decomposition, code-block or wavelet fields.");
+    }
+    if (style & ~63) {
+      this.pending = "Extended code-block coding is outside this structural inspection.";
+    }
+    if (!component && (this.bytes[start + 1] > 4 || !this.view.getUint16(start + 2) || this.bytes[start + 4] > 1)) {
+      pdfa_jpx_codestream_inspection_fail("The default coding style has an invalid progression, layer count or component transform.");
+    }
+    this.exact(segment, minimum + (flags & 1 ? levels + 1 : 0));
+    if (flags & 1) {
+      for (let index = 1; index <= levels; index++) {
+        const precinct = this.bytes[data + 5 + index];
+        if (!(precinct & 15) || !(precinct >> 4)) {
+          pdfa_jpx_codestream_inspection_fail("Non-LL precinct exponents must both be nonzero.");
+        }
+      }
+    }
+    return levels;
+  }
+  quantization(segment, levels, prefix = 0) {
+    this.minimum(segment, 3 + prefix);
+    const style = this.bytes[segment.data + prefix] & 31;
+    if (style > 2) {
+      pdfa_jpx_codestream_inspection_fail("The quantization marker has an invalid quantization style.");
+    }
+    const subbands = 3 * levels + 1;
+    let size = 2;
+    if (style === 0) {
+      size = subbands;
+    } else if (style === 2) {
+      size = 2 * subbands;
+    }
+    const available = segment.length - 3 - prefix;
+    if (style === 1) {
+      this.exact(segment, 3 + prefix + size);
+    } else {
+      const unit = style === 0 ? 1 : 2;
+      const count = available / unit;
+      if (!Number.isInteger(count) || count < subbands || count > 97 || count % 3 !== 1) {
+        pdfa_jpx_codestream_inspection_fail("The quantization marker does not contain a complete supported subband entry set.");
+      }
+    }
+    if (style === 0) {
+      for (let offset = segment.data + prefix + 1; offset < segment.end; offset++) {
+        if (this.bytes[offset] & 7) {
+          pdfa_jpx_codestream_inspection_fail("An unquantized subband descriptor contains reserved low bits.");
+        }
+      }
+    }
+  }
+  geometry(segment) {
+    this.minimum(segment, 38);
+    if (this.view.getUint16(segment.data) !== 0) {
+      pdfa_jpx_codestream_inspection_unknown("JPEG 2000 profile or capability extensions are outside this base-profile inspection.");
+    }
+    const count = this.view.getUint16(segment.data + 34);
+    this.exact(segment, 38 + 3 * count);
+    if (!count) {
+      pdfa_jpx_codestream_inspection_fail("SIZ has no image components.");
+    }
+    const x = this.view.getUint32(segment.data + 2);
+    const y = this.view.getUint32(segment.data + 6);
+    const originX = this.view.getUint32(segment.data + 10);
+    const originY = this.view.getUint32(segment.data + 14);
+    const tileX = this.view.getUint32(segment.data + 18);
+    const tileY = this.view.getUint32(segment.data + 22);
+    const tileOriginX = this.view.getUint32(segment.data + 26);
+    const tileOriginY = this.view.getUint32(segment.data + 30);
+    if (x <= originX || y <= originY || !tileX || !tileY || tileOriginX > originX || tileOriginY > originY || tileOriginX + tileX <= originX || tileOriginY + tileY <= originY) {
+      pdfa_jpx_codestream_inspection_fail("SIZ declares an invalid image or tile grid.");
+    }
+    this.tileCount = Math.ceil((x - tileOriginX) / tileX) * Math.ceil((y - tileOriginY) / tileY);
+    if (this.tileCount > 65535) {
+      pdfa_jpx_codestream_inspection_fail("SIZ declares more tiles than Part 1 tile indices can represent.");
+    }
+    if (this.tileCount > 4096 || count > 64) {
+      pdfa_jpx_codestream_inspection_unknown("The image tile or component count exceeds the inspection limit.");
+    }
+    this.components = count;
+  }
+  header(offset, main, part = 0, limit = this.bytes.length) {
+    const state = {
+      cod: null,
+      qcd: null,
+      coc: new Map(),
+      qcc: new Map(),
+      regions: new Set()
+    };
+    let first = true;
+    while (offset + 2 <= limit) {
+      const marker = this.marker(offset);
+      if (main && marker === SOT || !main && marker === SOD) {
+        this.finishHeader(state, main, part);
+        return {
+          offset,
+          state
+        };
+      }
+      if (main && first && marker !== SIZ || [SOC, SOT, SOD, EOC, 0xff91, 0xff92].includes(marker)) {
+        pdfa_jpx_codestream_inspection_fail("A marker occurs in an invalid codestream header position.");
+      }
+      first = false;
+      const known = [SIZ, COD, COC, QCD, QCC, RGN, COM].includes(marker) || OPTIONAL.has(marker);
+      if (!known) {
+        pdfa_jpx_codestream_inspection_unknown("An extension or unknown marker prevents complete header inspection.");
+      }
+      const segment = this.segment(offset);
+      if (segment.end > limit) {
+        pdfa_jpx_codestream_inspection_fail("A marker segment exceeds its enclosing header or tile-part extent.");
+      }
+      if (!main && MAIN_ONLY.has(marker) || main && TILE_ONLY.has(marker) || !main && part > 0 && !LATER_PART.has(marker)) {
+        pdfa_jpx_codestream_inspection_fail("A marker is not permitted in this main or tile-part header.");
+      }
+      if (marker === SIZ) {
+        if (!main || this.components !== undefined) {
+          pdfa_jpx_codestream_inspection_fail("SIZ must occur once immediately after SOC.");
+        }
+        this.geometry(segment);
+      } else if (marker === COD) {
+        if (state.cod !== null) {
+          pdfa_jpx_codestream_inspection_fail("A header contains multiple default coding style markers.");
+        }
+        state.cod = this.coding(segment);
+      } else if (marker === COC) {
+        const component = this.component(segment);
+        if (state.coc.has(component.index)) {
+          pdfa_jpx_codestream_inspection_fail("A header contains duplicate component coding style markers.");
+        }
+        state.coc.set(component.index, this.coding(segment, true));
+      } else if (marker === QCD) {
+        if (state.qcd) {
+          pdfa_jpx_codestream_inspection_fail("A header contains multiple default quantization markers.");
+        }
+        state.qcd = segment;
+      } else if (marker === QCC) {
+        const component = this.component(segment);
+        if (state.qcc.has(component.index)) {
+          pdfa_jpx_codestream_inspection_fail("A header contains duplicate component quantization markers.");
+        }
+        state.qcc.set(component.index, {
+          segment,
+          prefix: component.size
+        });
+      } else if (marker === RGN) {
+        const component = this.component(segment);
+        this.exact(segment, 4 + component.size);
+        if (state.regions.has(component.index) || this.bytes[segment.data + component.size] !== 0) {
+          pdfa_jpx_codestream_inspection_fail("A region-of-interest marker has invalid style or duplicate component.");
+        }
+        state.regions.add(component.index);
+      } else if (marker === COM) {
+        this.minimum(segment, 5);
+        if (this.view.getUint16(segment.data) > 1) {
+          this.pending = "An unregistered comment representation is outside this inspection.";
+        }
+      } else {
+        this.minimum(segment, OPTIONAL.get(marker));
+        if (marker === 0xff60) {
+          this.packedMain = true;
+        }
+        if (marker === 0xff61) {
+          this.packedTile = true;
+        }
+        this.pending = "Additional packet, progression or registration marker fields remain unverified.";
+      }
+      offset = segment.end;
+    }
+    return pdfa_jpx_codestream_inspection_fail("A codestream header has no terminating tile-part marker.");
+  }
+  finishHeader(state, main, part) {
+    if (main && (state.cod === null || !state.qcd)) {
+      pdfa_jpx_codestream_inspection_fail("The main codestream header requires COD and QCD markers.");
+    }
+    if (state.qcd) {
+      this.quantization(state.qcd, 0);
+    }
+    for (const quantization of state.qcc.values()) {
+      this.quantization(quantization.segment, 0, quantization.prefix);
+    }
+    if (this.packedMain && this.packedTile) {
+      pdfa_jpx_codestream_inspection_fail("Main-header and tile-header packed packet headers are mutually exclusive.");
+    }
+    if (main || part > 0) {
+      return;
+    }
+    const selected = new Map();
+    for (let index = 0; index < this.components; index++) {
+      const inherited = state.cod === null ? this.main.coc.get(index) : null;
+      const levels = state.coc.get(index) ?? state.cod ?? inherited ?? this.main.cod;
+      let quantization = state.qcc.get(index);
+      quantization ||= state.qcd ? {
+        segment: state.qcd,
+        prefix: 0
+      } : this.main.qcc.get(index) ?? {
+        segment: this.main.qcd,
+        prefix: 0
+      };
+      const previous = selected.get(quantization.segment);
+      if (!previous || previous.levels < levels) {
+        selected.set(quantization.segment, {
+          ...quantization,
+          levels
+        });
+      }
+    }
+    for (const quantization of selected.values()) {
+      this.quantization(quantization.segment, quantization.levels, quantization.prefix);
+    }
+  }
+  inspect() {
+    const length = this.bytes.length;
+    if (length < 4 || this.marker(0) !== SOC) {
+      pdfa_jpx_codestream_inspection_fail("The codestream must begin with SOC.");
+    }
+    if (this.view.getUint16(length - 2) !== EOC) {
+      pdfa_jpx_codestream_inspection_fail("The codestream must end with EOC.");
+    }
+    const initial = this.header(2, true);
+    let offset = initial.offset;
+    this.main = initial.state;
+    while (offset < length) {
+      const marker = this.marker(offset);
+      if (marker === EOC) {
+        if (offset !== length - 2 || !this.counts.tileParts || this.tiles.size !== this.tileCount) {
+          pdfa_jpx_codestream_inspection_fail("EOC is misplaced or the codestream omits image tiles.");
+        }
+        for (const tile of this.tiles.values()) {
+          if (tile.total && tile.next !== tile.total) {
+            pdfa_jpx_codestream_inspection_fail("A tile's declared tile-part count does not match its observed parts.");
+          }
+        }
+        this.counts.tiles = this.tiles.size;
+        return {
+          status: this.pending ? "unknown" : "pass",
+          detail: this.pending ?? "Main and tile-part marker fields, declared boundaries and final EOC were checked without decoding packets.",
+          counts: this.counts
+        };
+      }
+      if (marker !== SOT) {
+        pdfa_jpx_codestream_inspection_fail("A declared tile-part boundary is not followed by SOT or EOC.");
+      }
+      if (++this.counts.tileParts > 4096) {
+        pdfa_jpx_codestream_inspection_unknown("The tile-part count exceeds the inspection limit.");
+      }
+      const start = offset;
+      const segment = this.segment(offset);
+      this.exact(segment, 10);
+      const index = this.view.getUint16(segment.data);
+      const size = this.view.getUint32(segment.data + 2);
+      const part = this.bytes[segment.data + 6],
+        total = this.bytes[segment.data + 7];
+      if (index >= this.tileCount || index === 65535 || part === 255 || size !== 0 && size < 14) {
+        pdfa_jpx_codestream_inspection_fail("The start-of-tile-part marker has invalid index, count or extent.");
+      }
+      const tile = this.tiles.get(index) ?? {
+        next: 0,
+        total: 0
+      };
+      if (part !== tile.next || total && part >= total || total && tile.total && total !== tile.total) {
+        pdfa_jpx_codestream_inspection_fail("Tile-part indices or declared totals are inconsistent.");
+      }
+      tile.next++;
+      tile.total ||= total;
+      this.tiles.set(index, tile);
+      const end = size ? start + size : length - 2;
+      if (end > length - 2) {
+        pdfa_jpx_codestream_inspection_fail("A tile-part extent exceeds final EOC.");
+      }
+      const parsed = this.header(segment.end, false, part, end);
+      offset = parsed.offset + 2;
+      if (size === 0) {
+        pdfa_jpx_codestream_inspection_unknown("An open-ended final tile-part cannot be verified without parsing packet data.");
+      }
+      if (end < offset || end > length - 2) {
+        pdfa_jpx_codestream_inspection_fail("A tile-part extent does not contain its header or exceeds final EOC.");
+      }
+      offset = end;
+    }
+    return pdfa_jpx_codestream_inspection_fail("The codestream has no final EOC marker.");
+  }
+}
+function inspectJpxCodestream(bytes) {
+  const wrapper = getJpxCodestream(bytes);
+  if (wrapper.status !== "pass") {
+    return {
+      status: wrapper.status,
+      detail: wrapper.detail
+    };
+  }
+  const inspection = new CodestreamInspection(wrapper.bytes);
+  try {
+    return inspection.inspect();
+  } catch (error) {
+    if (error instanceof CodestreamFinding) {
+      return {
+        status: error.status,
+        detail: error.message,
+        counts: inspection.counts
+      };
+    }
+    return {
+      status: "unknown",
+      detail: "The original JPEG 2000 marker structure could not be fully inspected.",
+      counts: inspection.counts
+    };
+  }
+}
+
 ;// ./src/core/pdfa_transparency_inspection.js
+
 
 
 
@@ -66972,7 +67431,8 @@ const GROUP = "PDF-TRANSPARENCY-GROUP";
 const MASK = "PDF-SOFT-MASK";
 const pdfa_transparency_inspection_STATE = "PDF-TRANSPARENCY-STATE";
 const JPX = "PDF-JPX-ALPHA";
-const pdfa_transparency_inspection_RULES = [BLEND, PAGE, GROUP, MASK, pdfa_transparency_inspection_STATE, JPX];
+const CODESTREAM = "PDF-JPX-CODESTREAM";
+const pdfa_transparency_inspection_RULES = [BLEND, PAGE, GROUP, MASK, pdfa_transparency_inspection_STATE, JPX, CODESTREAM];
 const pdfa_transparency_inspection_RANK = {
   "not-applicable": 0,
   pass: 1,
@@ -67001,7 +67461,10 @@ class TransparencyInspection {
       graphicsStates: 0,
       softMasks: 0,
       imageSoftMasks: 0,
-      jpxAlphaStreams: 0
+      jpxAlphaStreams: 0,
+      jpxCodestreams: 0,
+      jpxHeaderSegments: 0,
+      jpxTileParts: 0
     };
   }
   note(id, status, location, detail) {
@@ -67478,6 +67941,46 @@ class TransparencyInspection {
     }
     return host.bytes(stream);
   }
+  jpxFilters(dict) {
+    const filter = this.host.get(dict, "Filter");
+    const filters = Array.isArray(filter) ? filter : [filter];
+    return filters.length <= 16 ? filters.map(value => this.host.resolve(value)) : null;
+  }
+  async jpxEvidence(source, filters) {
+    if (!this.jpxResults.has(source)) {
+      const bytes = await this.jpxBytes(source, filters);
+      this.jpxResults.set(source, {
+        bytes
+      });
+    }
+    return this.jpxResults.get(source);
+  }
+  async codestream(dict, source, path) {
+    const filters = this.jpxFilters(dict);
+    const declared = filters?.some(value => isName(value, "JPXDecode") || isName(value, "JPX"));
+    if (!declared && !(source instanceof JpxStream)) {
+      if (!filters || filters.includes(this.unresolved)) {
+        this.note(CODESTREAM, "unknown", path, "The image filters could not be established.");
+      }
+      return;
+    }
+    if (!declared || !(source instanceof JpxStream)) {
+      this.note(CODESTREAM, "unknown", path, "The original JPX stream and its filter declaration could not be established.");
+      return;
+    }
+    const evidence = await this.jpxEvidence(source, filters);
+    if (!evidence.codestream) {
+      this.counts.jpxCodestreams++;
+      evidence.codestream = evidence.bytes ? inspectJpxCodestream(evidence.bytes) : {
+        status: "unknown",
+        detail: "Original JP2 bytes could not be read within the supported filter and byte limits."
+      };
+      this.counts.jpxHeaderSegments += evidence.codestream.counts?.headerSegments || 0;
+      this.counts.jpxTileParts += evidence.codestream.counts?.tileParts || 0;
+    }
+    const result = evidence.codestream;
+    this.note(CODESTREAM, result.status, path + "/Codestream", result.detail);
+  }
   async embeddedAlpha(dict, source, path) {
     const {
       host
@@ -67487,9 +67990,7 @@ class TransparencyInspection {
     if (pdfa_transparency_inspection_absent(mode)) {
       return false;
     }
-    const filter = host.get(dict, "Filter");
-    const filters = Array.isArray(filter) ? filter : [filter];
-    const resolved = filters.length <= 16 ? filters.map(value => host.resolve(value)) : null;
+    const resolved = this.jpxFilters(dict);
     const jpx = resolved?.some(value => isName(value, "JPXDecode") || isName(value, "JPX"));
     if (!jpx) {
       if (source instanceof JpxStream || !resolved || resolved.includes(unknown)) {
@@ -67516,16 +68017,16 @@ class TransparencyInspection {
       this.note(JPX, "unknown", path, "The original JPX stream could not be inspected.");
       return unknown;
     }
-    if (!this.jpxResults.has(source)) {
+    const evidence = await this.jpxEvidence(source, resolved);
+    if (!evidence.alpha) {
       this.counts.jpxAlphaStreams++;
-      const bytes = await this.jpxBytes(source, resolved);
-      this.jpxResults.set(source, bytes ? inspectJpxAlpha(bytes, mode) : {
+      evidence.alpha = evidence.bytes ? inspectJpxAlpha(evidence.bytes, mode) : {
         status: "unknown",
         detail: "Original JP2 bytes could not be read within the supported filter and byte limits.",
         transparent: null
-      });
+      };
     }
-    const result = this.jpxResults.get(source);
+    const result = evidence.alpha;
     this.note(JPX, result.status, path + "/SMaskInData", result.detail);
     return result.transparent === null ? unknown : result.transparent;
   }
@@ -67565,6 +68066,13 @@ class TransparencyInspection {
     } = this;
     const unknown = this.unresolved;
     const mask = host.get(dict, "SMask");
+    await this.codestream(dict, source, path);
+    const hardMask = host.get(dict, "Mask");
+    if (hardMask instanceof BaseStream) {
+      await this.codestream(hardMask.dict, hardMask, path + "/Mask");
+    } else if (hardMask === unknown) {
+      this.note(CODESTREAM, "unknown", path + "/Mask", "An image mask stream could not be resolved.");
+    }
     const embedded = await this.embeddedAlpha(dict, source, path);
     if (pdfa_transparency_inspection_absent(mask)) {
       return embedded;
@@ -67579,6 +68087,7 @@ class TransparencyInspection {
       this.counts.imageSoftMasks++;
     }
     const m = mask.dict;
+    await this.codestream(m, mask, path);
     const type = host.get(m, "Type");
     const subtype = host.get(m, "Subtype");
     const imageMask = host.get(m, "ImageMask");
@@ -76363,7 +76872,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "6.4.170";
+    const workerVersion = "6.4.171";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }

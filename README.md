@@ -410,11 +410,28 @@ Unterstützt sind direktes JPXDecode und eine vorgeschaltete Flate-Dekompression
 mit neutralen DecodeParms. Paletten, abweichende Kanalabbildungen, JPX-Ebenen,
 uneindeutige Alpha-Modi und überschrittene Prüfgrenzen bleiben offen.
 Bestätigt wird die deklarierte Header- und Kanalstruktur. Die vollständige
-Codestream- und Pixelprüfung, tatsächliche Vormultiplikation und die
+Paket- und Pixelprüfung, tatsächliche Vormultiplikation und die
 Übereinstimmung der PDF-Farbraumangabe mit den kodierten Farbdaten bleiben
 offen.
 [ISO 32000-1, Abschnitt 7.4.9 und Tabelle 89](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf),
 [ITU-T T.800, Anhang I](https://www.itu.int/rec/T-REC-T.800/en)
+
+Die eigene Regel PDF-JPX-CODESTREAM untersucht zusätzlich die Struktur des
+ersten JP2-Codestreams, auch ohne eingebettetes Alpha oder bei Modus 0.
+Sie prüft SOC und SIZ, die erforderlichen COD- und QCD-Hauptheader,
+Markersegmentlängen, Tile-Indizes, Tile-Part-Folgen und deklarierte Anzahlen,
+SOT/SOD-Grenzen sowie den abschließenden EOC-Marker. Die vollständige
+Tile-Abdeckung wird mit dem SIZ-Raster verglichen. Komprimierte Bilddaten
+werden anhand der originalen Psot-Längen übersprungen. Markerähnliche Bytes
+in diesen Daten verändern die nachgewiesenen Grenzen nicht.
+Ein offenes letztes Tile-Part mit Psot 0, erweiterte Codierungen und
+überschrittene Prüfgrenzen bleiben offen. Ein bestandenes Ergebnis bestätigt
+diese Struktur. Entropiecodierung, Paketsemantik, die wirksamen
+Mehrkomponententransformationen und dekodierte Pixel bleiben offen.
+Die Zähler jpxCodestreams, jpxHeaderSegments und jpxTileParts stehen
+unter transparencyCounts. Die Prüfung liest begrenzte Originaldaten und
+verwendet keinen Bilddecoder.
+[ITU-T T.800, Anhang A und Abschnitt B.11](https://www.itu.int/rec/T-REC-T.800/en)
 
 Bei einer Masken-Transferfunktion unter /TR untersucht der Worker Typ 2
 anhand der originalen Funktionsparameter. Er prüft genau einen Eingang und
@@ -562,6 +579,15 @@ Bei Grau plus Alpha und Flate-verpacktem JP2 meldete die Referenz zusätzliche
 Farbregelfehler. Viele gezielt beschädigte Kanaldefinitionen, abgeschnittene
 Codestream-Boxen und widersprüchliche Bildmaße blieben dort ohne Befund.
 Diese Unterschiede sind durch die gemeinsamen Node-/Browser-Fälle erfasst.
+Der zusätzliche Codestream-Vergleich mit veraPDF 1.30.2 bestätigte sieben
+ausgewählte kleine Dateien als PDF/A-3b, jeweils mit 242 Assertions. Darunter
+waren die echten Ein- und Vier-Tile-Bilder sowie eine reine Paketdatenänderung.
+Die Referenz akzeptierte auch fehlendes EOC, falsches Psot, fehlendes COD und
+einen ungültigen Wavelet-Wert. Die eigene Strukturprüfung meldet diese vier
+Defekte anhand der T.800-Headeranforderungen. Die Referenz liefert für diese
+Defekte daher keine Bestätigung. Gemeinsame Node-/Browser-Fälle prüfen
+zusätzlich Headerreihenfolge, Komponenten- und Tile-Überschreibungen,
+Tile-Part-Folgen und die Trennung von Alpha- und Codestream-Befunden.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)

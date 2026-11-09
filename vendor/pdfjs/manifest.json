@@ -1,9 +1,9 @@
 {
   "repository": "https://github.com/Streetblock/pdf.js",
-  "commit": "7bd51fb1318e0536c338054d452471d128785faf",
+  "commit": "bb544b02a2d06434a6918f06ad2f4b7f6c97f01e",
   "build": "generic-legacy",
   "files": {
-    "pdf.mjs": "46d6fff56297fd38c814375040d95d3aa58990cb03fff177eea66e5d729e3471",
-    "pdf.worker.mjs": "fc2fa71fef6d87486852f8c048b9f90ebd62fd0043ec6a498e3331f770a857d0"
+    "pdf.mjs": "9cf1d7d05db785211a4694337bef2a171ecc3de7c43d983b43e97145dad155f4",
+    "pdf.worker.mjs": "67d4d58060c463c263a022e0bb19afa4fe32483d77937aded29454c43e20d19a"
   }
 }

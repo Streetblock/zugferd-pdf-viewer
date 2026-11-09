@@ -69,6 +69,8 @@ const transparencyRules = [
         label: 'Soft Masks und ihre Transferfunktionen' },
     { id: 'PDF-JPX-ALPHA', specification: PDF_SPEC + ', ITU-T T.800', clause: '7.4.9, 8.9.5.1 und Anhang I',
         label: 'JPEG-2000-Header und Zuordnung des eingebetteten Alphakanals' },
+    { id: 'PDF-JPX-CODESTREAM', specification: PDF_SPEC + ', ITU-T T.800', clause: '7.4.9 und T.800 Anhang A',
+        label: 'JPEG-2000-Codestream: Header, Tile-Grenzen und Abschlussmarker' },
     { id: 'PDF-TRANSPARENCY-STATE', specification: PDF_SPEC, clause: '8.4.5, 11.6.4', label: 'Deckkraft und weitere Transparenzparameter' },
 ];
 const xmpRules = [
