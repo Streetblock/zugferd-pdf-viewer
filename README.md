@@ -392,7 +392,7 @@ allein nicht. Der Worker untersucht Soft-Mask-Dictionaries mit /Alpha oder
 der Inhalt der Form der Maskenform. Bei einer Bildmaske dient deren Grau der
 Maske. Diese Werte zählt die Farbprüfung nicht als sichtbare Gerätefarben.
 Der JSON-Bericht enthält transparencyCounts. Die Prüfung lässt unter anderem
-JPEG-2000-Alphadaten, Masken-Transferfunktionen der Typen 0, 3 und 4 sowie Transparenz in Mustern,
+JPEG-2000-Alphadaten, Masken-Transferfunktionen der Typen 3 und 4 sowie Transparenz in Mustern,
 Inline-Bildern und Type-3-Glyphen offen. Die Prüfung
 arbeitet auf PDF-Objekten und Grafikoperatoren. Pixel und ICC-Transformationen
 sind außerhalb dieses Prüfumfangs.
@@ -411,6 +411,19 @@ Stream-Dictionaries. Streamdaten, Filter und die Pixelberechnung sind
 außerhalb dieser Parameterprüfung. Nicht auflösbare Parameter bleiben offen.
 Die Befunde erscheinen unter PDF-SOFT-MASK mit Fundstelle im /TR-Pfad.
 [ISO 32000-1, Abschnitte 7.10.1, 7.10.3 und Tabelle 144](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf)
+
+Für Typ 0 prüft der Worker die Sampletabelle im Originalstream. Die Funktion
+muss genau einen Eingang und einen Ausgang deklarieren. Geprüft werden
+Domain, Range, Sampleanzahl, Bittiefe, Interpolationsordnung und die
+Mapping-Paare Encode und Decode. Anschließend müssen mindestens
+ceil(Size × BitsPerSample / 8) dekodierte Bytes vorliegen. Zusätzliche Bytes
+und ungenutzte Paddingbits sind zulässig. Encode und Decode dürfen
+umgekehrte Endpunkte haben. Die Prüfung unterstützt ungefilterte Streams
+und einzelnes Flate mit neutralen DecodeParms. Andere Filter, externe
+Sampledaten und überschrittene Decodergrenzen bleiben offen. Kubische
+Interpolation wird strukturell geprüft. Die numerische Interpolation und
+Pixelberechnung liegen außerhalb dieses Prüfumfangs.
+[ISO 32000-1, Abschnitt 7.10.2 und Tabelle 39](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf)
 
 Für Anmerkungen untersucht der Worker die gespeicherte Normaldarstellung
 unter /AP /N mit eigenem Grafikzustand und eigenen Ressourcen. Eine
@@ -479,6 +492,14 @@ Clipping-Intervalle, Exponenten und gezielt beschädigte Definitionen. veraPDF
 mehrere Ein- oder Ausgänge und unzulässige Kombinationen von Exponent und
 Domain. Die neuen Strukturbefunde beruhen auf den Anforderungen aus
 ISO 32000-1, Abschnitten 7.10.1 und 7.10.3 sowie Tabelle 144.
+Die Typ-0-Fälle prüfen zusätzlich reale Samplebytes, alle zulässigen
+Bittiefen, Packung, Flate, Mapping-Standardwerte und abgeschnittene Daten.
+veraPDF 1.30.2 bestätigte die gültigen Parameter und Sampletabellen der
+Referenzfälle. Fehlerhafte Typ-0-Definitionen und zu kurze Sampledaten
+blieben dort ohne entsprechenden Befund. Externe Daten und einen
+unbekannten Filter lehnte die Referenz über ihre allgemeinen Streamregeln
+ab. Der lokale Typ-0-Prüfumfang lässt die nicht gelesenen Sampledaten
+in diesen beiden Fällen offen.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)

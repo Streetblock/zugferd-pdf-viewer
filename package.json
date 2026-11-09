@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test tests/validation.test.mjs tests/server.test.mjs tests/xml-validator.test.mjs tests/xrechnung.test.mjs tests/pdf-validation.test.mjs tests/pdfa-structure.test.mjs tests/pdfa-document.test.mjs tests/pdfa-embedding.test.mjs tests/pdfa-font.test.mjs tests/pdfa-color.test.mjs tests/pdfa-transparency.test.mjs tests/pdfa-annotation-transparency.test.mjs tests/pdfa-mask-transfer.test.mjs",
+    "test": "node --test tests/validation.test.mjs tests/server.test.mjs tests/xml-validator.test.mjs tests/xrechnung.test.mjs tests/pdf-validation.test.mjs tests/pdfa-structure.test.mjs tests/pdfa-document.test.mjs tests/pdfa-embedding.test.mjs tests/pdfa-font.test.mjs tests/pdfa-color.test.mjs tests/pdfa-transparency.test.mjs tests/pdfa-annotation-transparency.test.mjs tests/pdfa-mask-transfer.test.mjs tests/pdfa-mask-sampled.test.mjs",
     "build": "node tools/build-validator.mjs",
     "dev:reference": "node server.mjs --reference",
     "test:reference": "node --test tests/reference.test.mjs",
