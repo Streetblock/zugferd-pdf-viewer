@@ -65,8 +65,8 @@ const transparencyRules = [
     { id: '6.2.10-1', clause: '6.2.10', label: 'Zulässige Blend-Modi' },
     { id: '6.2.10-2', clause: '6.2.10', label: 'PDF/A-Output-Intent oder Seiten-Blendfarbraum bei Transparenz' },
     { id: 'PDF-TRANSPARENCY-GROUP', specification: PDF_SPEC, clause: '11.6.6', label: 'Struktur und Blendfarbraum von Transparenzgruppen' },
-    { id: 'PDF-SOFT-MASK', specification: PDF_SPEC, clause: '7.10.1–7.10.4, 11.6.5',
-        label: 'Struktur von Soft Masks und Transferfunktionen der Typen 0, 2 und 3' },
+    { id: 'PDF-SOFT-MASK', specification: PDF_SPEC, clause: '7.10.1–7.10.5, 11.6.5',
+        label: 'Soft Masks und ihre Transferfunktionen' },
     { id: 'PDF-TRANSPARENCY-STATE', specification: PDF_SPEC, clause: '8.4.5, 11.6.4', label: 'Deckkraft und weitere Transparenzparameter' },
 ];
 const xmpRules = [

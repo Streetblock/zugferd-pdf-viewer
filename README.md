@@ -392,7 +392,7 @@ allein nicht. Der Worker untersucht Soft-Mask-Dictionaries mit /Alpha oder
 der Inhalt der Form der Maskenform. Bei einer Bildmaske dient deren Grau der
 Maske. Diese Werte zählt die Farbprüfung nicht als sichtbare Gerätefarben.
 Der JSON-Bericht enthält transparencyCounts. Die Prüfung lässt unter anderem
-JPEG-2000-Alphadaten, Masken-Transferfunktionen des Typs 4 sowie Transparenz in Mustern,
+JPEG-2000-Alphadaten, nicht abschließend bewertbare Rechnerfunktionen sowie Transparenz in Mustern,
 Inline-Bildern und Type-3-Glyphen offen. Die Prüfung
 arbeitet auf PDF-Objekten und Grafikoperatoren. Pixel und ICC-Transformationen
 sind außerhalb dieses Prüfumfangs.
@@ -428,15 +428,27 @@ Pixelberechnung liegen außerhalb dieses Prüfumfangs.
 Typ 3 verbindet Teilfunktionen über die Intervalle in Domain und Bounds.
 Der Worker prüft die Anzahl und Reihenfolge der Intervallgrenzen, die
 Encode-Paare und optional Range. Alle Teilfunktionen müssen einen Eingang
-und einen Ausgang haben. Funktionen der Typen 0, 2 und 3 werden rekursiv
+und einen Ausgang haben. Funktionen der Typen 0, 2, 3 und 4 werden rekursiv
 untersucht, einschließlich indirekter und wiederverwendeter Definitionen.
 Der letzte Bounds-Wert darf der oberen Domain-Grenze entsprechen. Bei
 einer einzigen Teilfunktion sind leere Bounds und gleiche Domain-Endpunkte
 zulässig. Encode-Paare dürfen umgekehrt sein. Zyklische Verweise,
-Typ-4-Teilfunktionen und überschrittene Besuchs- oder Tiefengrenzen bleiben
+nicht abschließend bewertbarer Rechnercode und überschrittene Besuchs- oder Tiefengrenzen bleiben
 offen. Bekannte Fehler in einer anderen Teilfunktion werden weiterhin
 gemeldet. Die Befunde nennen den jeweiligen Pfad unter /TR/Functions.
 [ISO 32000-1, Abschnitt 7.10.4 und Tabelle 41](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf)
+
+Bei Typ 4 liest der Worker den Originalstream und prüft die vorgeschriebene
+Rechnersprache. Domain und Range müssen jeweils einen skalaren Bereich
+angeben. Die Analyse verfolgt Operandentypen, Stack und Zahlenintervalle
+durch die Anweisungen und Bedingungen. Ein bestandenes Ergebnis verlangt
+einen nachgewiesenen numerischen Einzelwert am Ende jedes untersuchten
+Pfads. Ungültige Syntax und eindeutig nachgewiesene Typ-, Stack- oder
+Rechenfehler ergeben einen Befund. Ungewisse Zweigbedingungen, mögliche
+Rechenfehler, nicht bewertbare Operationen und überschrittene Analysegrenzen
+können offen bleiben. Der Worker erzeugt aus dem Stream keine ausführbare
+JavaScript- oder WASM-Funktion.
+[ISO 32000-1, Abschnitt 7.10.5 und Tabelle 42](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf)
 
 Für Anmerkungen untersucht der Worker die gespeicherte Normaldarstellung
 unter /AP /N mit eigenem Grafikzustand und eigenen Ressourcen. Eine
@@ -518,6 +530,11 @@ gemeinsam genutzten Teilfunktionen und verschachtelten Samplefunktionen.
 Auch die gezielt beschädigten Bounds, Encode-Arrays und Teilfunktionen
 akzeptierte die Referenz. Die lokale Prüfung bewertet diese Definitionen
 nach ISO 32000-1, Abschnitt 7.10.4 und Tabelle 41.
+Für Typ 4 bestätigte veraPDF 1.30.2 die positiven Rechenbeispiele.
+Ungültige Syntax, falsche Operanden- und Ergebnistypen, Stackfehler und
+eindeutige Rechenfehler blieben in diesem Referenzlauf ohne entsprechenden
+Befund. Die lokalen Befunde beruhen auf den Anforderungen aus
+ISO 32000-1, Abschnitt 7.10.5 und Tabelle 42.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)

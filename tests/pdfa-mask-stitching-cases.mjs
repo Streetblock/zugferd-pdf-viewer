@@ -36,6 +36,7 @@ export function makePdfaMaskStitchingCases(xml) {
     const largeEncode = '[' + Array(count).fill('0 1').join(' ') + ']';
     const sampled = functionStream('/FunctionType 0 /Domain [0 1] /Range [0 1] /Size [2] /BitsPerSample 8', '\x00\xFF');
     const calculator = functionStream('/FunctionType 4 /Domain [0 1] /Range [0 1]', '{ dup mul }');
+    const uncertainCalculator = functionStream('/FunctionType 4 /Domain [0 1] /Range [0 1]', '{ 0.5 sub 1 exch div }');
     const budgetBounds = '[' + Array.from({ length: 15 }, (_, index) => (index + 1) / 16).join(' ') + ']';
     const budgetEncode = '[' + Array(16).fill('0 1').join(' ') + ']';
     const budgetObjects = [[18, linear]];
@@ -92,10 +93,10 @@ export function makePdfaMaskStitchingCases(xml) {
         ['an unresolved Bounds endpoint keeps the function graph open', { bounds: '[99 0 R]' }, 'unknown'],
         ['unresolved Domain cannot hide decreasing interior Bounds',
             { domain: '99 0 R', functions: `[${linear} ${quadratic} ${linear}]`, bounds: '[0.75 0.25]', encode: '[0 1 0 1 0 1]' }, 'fail'],
-        ['a calculator child keeps the transfer inspection open',
-            { functions: `[${linear} 18 0 R]`, extraObjects: [[18, calculator]] }, 'unknown'],
-        ['an unsupported child cannot hide an independent invalid child',
-            { functions: '[18 0 R << /FunctionType 2 /Domain [0 1] >>]', extraObjects: [[18, calculator]] }, 'fail'],
+        ['a calculator child is checked within a stitching function',
+            { functions: `[${linear} 18 0 R]`, extraObjects: [[18, calculator]] }, 'pass'],
+        ['an uncertain calculator child cannot hide an independent invalid child',
+            { functions: '[18 0 R << /FunctionType 2 /Domain [0 1] >>]', extraObjects: [[18, uncertainCalculator]] }, 'fail'],
         ['a direct self-reference leaves the stitching graph open',
             { indirect: true, functions: '[17 0 R]', bounds: '[]', encode: '[0 1]' }, 'unknown'],
         ['a cyclic pair of indirect functions leaves the stitching graph open',
