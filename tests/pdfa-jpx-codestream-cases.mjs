@@ -216,7 +216,7 @@ export function makePdfaJpxCodestreamCases(xml) {
         ['Psot cannot be shorter than the tile header', { mutation: 'short-psot' }, 'fail'],
         ['Psot must identify the next exact tile boundary', { mutation: 'wrong-psot' }, 'fail'],
         ['Psot cannot extend beyond the original codestream bytes', { mutation: 'oversized-psot' }, 'fail'],
-        ['a final open-ended tile part remains outside the bounded first stage', { mutation: 'zero-psot' }, 'unknown'],
+        ['a final open-ended tile part has a bounded marker envelope ending at EOC', { mutation: 'zero-psot' }, 'pass'],
         ['SOT has its exact required segment length', { mutation: 'short-sot' }, 'fail'],
         ['tile indices must fit the declared image grid', { mutation: 'wrong-tile-index' }, 'fail'],
         ['tile parts begin with sequence index zero', { mutation: 'wrong-part-index' }, 'fail'],

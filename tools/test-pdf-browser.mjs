@@ -21,6 +21,7 @@ import { makePdfaMaskStitchingCases, makePdfaMaskStitchingFixture } from '../tes
 import { makePdfaMaskCalculatorCases, makePdfaMaskCalculatorFixture } from '../tests/pdfa-mask-calculator-cases.mjs';
 import { makePdfaJpxAlphaCases, makePdfaJpxAlphaFixture } from '../tests/pdfa-jpx-alpha-cases.mjs';
 import { makePdfaJpxCodestreamCases, makePdfaJpxCodestreamFixture } from '../tests/pdfa-jpx-codestream-cases.mjs';
+import { makePdfaJpxOpenEndedCases, makePdfaJpxOpenEndedFixture } from '../tests/pdfa-jpx-open-ended-cases.mjs';
 import { sha256, validatePdfA } from '../src/pdfa-validation.mjs';
 const fork = process.argv[2];
 const executablePath = process.argv[3] || process.env.PDFJS_TEST_BROWSER;
@@ -93,6 +94,9 @@ const cases = [
     ['jp2-codestream.pdf', makePdfaJpxCodestreamFixture(xml, { multipleTiles: true }),
         'unknown', 'pass', 'pass'],
     ['missing-jp2-eoc.pdf', makePdfaJpxCodestreamFixture(xml, { mutation: 'missing-eoc' }),
+        'fail', 'pass', 'pass', 'PDF-JPX-CODESTREAM'],
+    ['jp2-open-ended.pdf', makePdfaJpxOpenEndedFixture(xml), 'unknown', 'pass', 'pass'],
+    ['nonfinal-jp2-open-ended.pdf', makePdfaJpxOpenEndedFixture(xml, { mutation: 'following-tile' }),
         'fail', 'pass', 'pass', 'PDF-JPX-CODESTREAM'],
     ['invoice.xml', new TextEncoder().encode(xml), 'pass', null, null],
 ];
@@ -201,6 +205,18 @@ try {
                 assert.equal(pdfa.transparencyCounts.jpxCodestreams, 1);
                 if (!pdfaFailure) assert.equal(pdfa.transparencyCounts.jpxTileParts, 4);
             }
+            if (name === 'jp2-open-ended.pdf' || name === 'nonfinal-jp2-open-ended.pdf') {
+                const pdfa = report.pdfValidation.pdfA;
+                const finding = pdfa.rules.find(rule => rule.id === 'PDF-JPX-CODESTREAM');
+                assert.equal(finding.status, pdfaFailure ? 'fail' : 'pass');
+                assert.match(finding.location, /\/Codestream$/);
+                assert.equal(pdfa.rules.find(rule => rule.id === 'PDF-JPX-ALPHA').status, 'pass');
+                assert.equal(pdfa.transparencyCounts.jpxCodestreams, 1);
+                if (!pdfaFailure) {
+                    assert.equal(pdfa.transparencyCounts.jpxTileParts, 1);
+                    assert.equal(pdfa.transparencyCounts.jpxOpenEndedTileParts, 1);
+                }
+            }
             if (name === 'document-objects.pdf') {
                 assert.equal(report.pdfValidation.pdfA.documentCounts.pages, 2);
                 for (const id of ['PDF-CATALOG', 'PDF-PAGE-TREE', '6.3.1-1', '6.5.1-1']) {
@@ -231,6 +247,7 @@ try {
         ...makePdfaMaskCalculatorCases(xml),
         ...makePdfaJpxAlphaCases(xml),
         ...makePdfaJpxCodestreamCases(xml),
+        ...makePdfaJpxOpenEndedCases(xml),
     ];
     for (const { name, bytes } of standaloneCases) {
         const inBrowser = await page.evaluate(async input => {

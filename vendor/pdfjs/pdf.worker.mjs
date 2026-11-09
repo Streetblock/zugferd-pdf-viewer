@@ -20,8 +20,8 @@
  */
 
 /**
- * pdfjsVersion = 6.4.171
- * pdfjsBuild = bb544b02a
+ * pdfjsVersion = 6.4.172
+ * pdfjsBuild = e46f3a627
  */
 /******/ var __webpack_modules__ = ({
 
@@ -66995,6 +66995,8 @@ const QCD = 0xff5c,
   RGN = 0xff5e,
   COM = 0xff64;
 const SOT = 0xff90,
+  SOP = 0xff91,
+  EPH = 0xff92,
   SOD = 0xff93,
   EOC = 0xffd9;
 const OPTIONAL = new Map([[0xff55, 4], [0xff57, 3], [0xff58, 3], [0xff5f, 9], [0xff60, 3], [0xff61, 3], [0xff63, 2]]);
@@ -67020,7 +67022,8 @@ class CodestreamInspection {
     this.counts = {
       headerSegments: 0,
       tileParts: 0,
-      tiles: 0
+      tiles: 0,
+      openEndedTileParts: 0
     };
     this.tiles = new Map();
     this.pending = null;
@@ -67176,6 +67179,7 @@ class CodestreamInspection {
   header(offset, main, part = 0, limit = this.bytes.length) {
     const state = {
       cod: null,
+      codFlags: null,
       qcd: null,
       coc: new Map(),
       qcc: new Map(),
@@ -67216,6 +67220,7 @@ class CodestreamInspection {
           pdfa_jpx_codestream_inspection_fail("A header contains multiple default coding style markers.");
         }
         state.cod = this.coding(segment);
+        state.codFlags = this.bytes[segment.data];
       } else if (marker === COC) {
         const component = this.component(segment);
         if (state.coc.has(component.index)) {
@@ -67302,6 +67307,55 @@ class CodestreamInspection {
       this.quantization(quantization.segment, quantization.levels, quantization.prefix);
     }
   }
+  finalTilePart(offset, flags) {
+    const end = this.bytes.length - 2;
+    while (offset < this.bytes.length) {
+      if (this.bytes[offset] !== 255) {
+        offset++;
+        continue;
+      }
+      if (offset + 1 >= this.bytes.length) {
+        pdfa_jpx_codestream_inspection_fail("The open-ended tile-part ends with an incomplete marker.");
+      }
+      const code = this.bytes[offset + 1];
+      if (code <= 0x8f) {
+        offset += 2;
+        continue;
+      }
+      const marker = this.view.getUint16(offset);
+      if (marker === EOC) {
+        if (offset !== end) {
+          pdfa_jpx_codestream_inspection_fail("EOC occurs before the end of the open-ended final tile-part.");
+        }
+        return offset;
+      }
+      if (marker === SOT || marker === SOD) {
+        pdfa_jpx_codestream_inspection_fail("An open-ended tile-part must be final and cannot contain SOT or SOD.");
+      }
+      if (code === 255) {
+        pdfa_jpx_codestream_inspection_unknown("Consecutive FF bytes cannot establish a final marker boundary without interpreting truncated packet data.");
+      }
+      if (marker === SOP) {
+        if (!(flags & 2)) {
+          pdfa_jpx_codestream_inspection_fail("SOP is not permitted by the effective tile coding style.");
+        }
+        if (offset + 6 > end || this.view.getUint16(offset + 2) !== 4) {
+          pdfa_jpx_codestream_inspection_fail("The open-ended tile-part has a truncated SOP or invalid Lsop.");
+        }
+        offset += 6;
+        continue;
+      }
+      if (marker === EPH) {
+        if (!(flags & 4)) {
+          pdfa_jpx_codestream_inspection_fail("EPH is not permitted by the effective tile coding style.");
+        }
+        offset += 2;
+        continue;
+      }
+      pdfa_jpx_codestream_inspection_unknown("An extension or reserved marker prevents open-ended tile-part framing inspection.");
+    }
+    return pdfa_jpx_codestream_inspection_fail("The open-ended tile-part has no terminating EOC marker.");
+  }
   inspect() {
     const length = this.bytes.length;
     if (length < 4 || this.marker(0) !== SOC) {
@@ -67327,7 +67381,7 @@ class CodestreamInspection {
         this.counts.tiles = this.tiles.size;
         return {
           status: this.pending ? "unknown" : "pass",
-          detail: this.pending ?? "Main and tile-part marker fields, declared boundaries and final EOC were checked without decoding packets.",
+          detail: this.pending ?? "Main and tile-part marker fields, declared or scanned final boundaries and final EOC were checked without decoding packets.",
           counts: this.counts
         };
       }
@@ -67363,8 +67417,13 @@ class CodestreamInspection {
       }
       const parsed = this.header(segment.end, false, part, end);
       offset = parsed.offset + 2;
+      if (part === 0) {
+        tile.flags = parsed.state.codFlags ?? this.main.codFlags;
+      }
       if (size === 0) {
-        pdfa_jpx_codestream_inspection_unknown("An open-ended final tile-part cannot be verified without parsing packet data.");
+        this.counts.openEndedTileParts++;
+        offset = this.finalTilePart(offset, tile.flags);
+        continue;
       }
       if (end < offset || end > length - 2) {
         pdfa_jpx_codestream_inspection_fail("A tile-part extent does not contain its header or exceeds final EOC.");
@@ -67464,7 +67523,8 @@ class TransparencyInspection {
       jpxAlphaStreams: 0,
       jpxCodestreams: 0,
       jpxHeaderSegments: 0,
-      jpxTileParts: 0
+      jpxTileParts: 0,
+      jpxOpenEndedTileParts: 0
     };
   }
   note(id, status, location, detail) {
@@ -67977,6 +68037,7 @@ class TransparencyInspection {
       };
       this.counts.jpxHeaderSegments += evidence.codestream.counts?.headerSegments || 0;
       this.counts.jpxTileParts += evidence.codestream.counts?.tileParts || 0;
+      this.counts.jpxOpenEndedTileParts += evidence.codestream.counts?.openEndedTileParts || 0;
     }
     const result = evidence.codestream;
     this.note(CODESTREAM, result.status, path + "/Codestream", result.detail);
@@ -76872,7 +76933,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "6.4.171";
+    const workerVersion = "6.4.172";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }

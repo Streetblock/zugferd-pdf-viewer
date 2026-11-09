@@ -424,14 +424,27 @@ SOT/SOD-Grenzen sowie den abschließenden EOC-Marker. Die vollständige
 Tile-Abdeckung wird mit dem SIZ-Raster verglichen. Komprimierte Bilddaten
 werden anhand der originalen Psot-Längen übersprungen. Markerähnliche Bytes
 in diesen Daten verändern die nachgewiesenen Grenzen nicht.
-Ein offenes letztes Tile-Part mit Psot 0, erweiterte Codierungen und
-überschrittene Prüfgrenzen bleiben offen. Ein bestandenes Ergebnis bestätigt
-diese Struktur. Entropiecodierung, Paketsemantik, die wirksamen
-Mehrkomponententransformationen und dekodierte Pixel bleiben offen.
-Die Zähler jpxCodestreams, jpxHeaderSegments und jpxTileParts stehen
-unter transparencyCounts. Die Prüfung liest begrenzte Originaldaten und
-verwendet keinen Bilddecoder.
-[ITU-T T.800, Anhang A und Abschnitt B.11](https://www.itu.int/rec/T-REC-T.800/en)
+Bei einem letzten Tile-Part mit Psot 0 untersucht der Worker die originalen
+Daten nach SOD bis zum EOC am exakten Codestream-Ende. Auf FF folgende Bytes
+bis einschließlich 8F sind dabei Nutzdaten; auch SOC- oder SIZ-ähnliche
+Bytefolgen beenden das Tile-Part nicht. Ein weiteres SOT oder SOD und ein
+vorzeitiges EOC ergeben einen Fehler. Physische FF-FF-Folgen außerhalb von
+SOP-Feldern bleiben offen: Sie werden nicht als Füllbytes übersprungen;
+ein gekürztes letztes Paket lässt sich hier noch nicht abschließend bewerten.
+SOP muss die feste Segmentlänge 4 haben, EPH besteht aus zwei Bytes. Beide
+Marker müssen durch die wirksamen COD-Flags erlaubt sein. Die Hauptheader-Flags
+können im ersten Tile-Part überschrieben werden und gelten dann auch für
+spätere Teile desselben Tiles. Die SOP-Sequenznummer wird als Feld gelesen,
+ihre Zuordnung zu konkreten Paketen bleibt offen. Andere Erweiterungsmarker,
+gepackte Paketheader und überschrittene Prüfgrenzen bleiben offen.
+Die bestehenden Grenzen für Originaldaten gelten auch für diesen Scan.
+Ein bestandenes Ergebnis bestätigt diese Struktur. Entropiecodierung,
+Paketsemantik, die wirksamen Mehrkomponententransformationen und dekodierte
+Pixel bleiben offen.
+Die Zähler jpxCodestreams, jpxHeaderSegments, jpxTileParts und
+jpxOpenEndedTileParts stehen unter transparencyCounts. Die Prüfung liest
+begrenzte Originaldaten und verwendet keinen Bilddecoder.
+[ITU-T T.800, Anhang A sowie B.11 und C.3.4](https://www.itu.int/rec/T-REC-T.800/en)
 
 Bei einer Masken-Transferfunktion unter /TR untersucht der Worker Typ 2
 anhand der originalen Funktionsparameter. Er prüft genau einen Eingang und
@@ -588,6 +601,12 @@ Defekte anhand der T.800-Headeranforderungen. Die Referenz liefert für diese
 Defekte daher keine Bestätigung. Gemeinsame Node-/Browser-Fälle prüfen
 zusätzlich Headerreihenfolge, Komponenten- und Tile-Überschreibungen,
 Tile-Part-Folgen und die Trennung von Alpha- und Codestream-Befunden.
+Für Psot 0 wurden zusätzlich drei echte 1×1-Bilder mit RGBA, RGB und Grau
+plus Alpha unabhängig dekodiert. Pillow 13.0.0 mit OpenJPEG 2.5.4 lieferte
+nach alleiniger Änderung des Psot-Felds auf 0 dieselben Pixel, Bildmaße und
+Farbmodi wie bei den Originalen. Dieser Entwicklungsvergleich bestätigt
+diese positiven Beispiele; die Laufzeitprüfung dekodiert weiterhin keine
+Bildpakete.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)
