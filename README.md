@@ -392,10 +392,25 @@ allein nicht. Der Worker untersucht Soft-Mask-Dictionaries mit /Alpha oder
 der Inhalt der Form der Maskenform. Bei einer Bildmaske dient deren Grau der
 Maske. Diese Werte zählt die Farbprüfung nicht als sichtbare Gerätefarben.
 Der JSON-Bericht enthält transparencyCounts. Die Prüfung lässt unter anderem
-JPEG-2000-Alphadaten, Masken-Transferfunktionen und Transparenz in Mustern,
+JPEG-2000-Alphadaten, Masken-Transferfunktionen der Typen 0, 3 und 4 sowie Transparenz in Mustern,
 Inline-Bildern und Type-3-Glyphen offen. Die Prüfung
 arbeitet auf PDF-Objekten und Grafikoperatoren. Pixel und ICC-Transformationen
 sind außerhalb dieses Prüfumfangs.
+
+Bei einer Masken-Transferfunktion unter /TR untersucht der Worker Typ 2
+anhand der originalen Funktionsparameter. Er prüft genau einen Eingang und
+einen Ausgang, die geordneten Intervalle /Domain und optional /Range, die
+Koeffizienten /C0 und /C1 sowie den Exponenten /N. Fehlende optionale
+Koeffizienten verwenden die Standardwerte. Gebrochene Exponenten verlangen
+einen nichtnegativen Eingabebereich. Bei negativen Exponenten muss der
+Bereich die Null ausschließen. Werte außerhalb von [0,1] sind bei Domain,
+Range und Koeffizienten zulässig, da Eingabe und Ausgabe nach den jeweiligen
+Clipping-Regeln begrenzt werden. Die Prüfung folgt indirekten Verweisen und
+untersucht die deklarierten Typ-2-Parameter in Dictionaries und
+Stream-Dictionaries. Streamdaten, Filter und die Pixelberechnung sind
+außerhalb dieser Parameterprüfung. Nicht auflösbare Parameter bleiben offen.
+Die Befunde erscheinen unter PDF-SOFT-MASK mit Fundstelle im /TR-Pfad.
+[ISO 32000-1, Abschnitte 7.10.1, 7.10.3 und Tabelle 144](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf)
 
 Für Anmerkungen untersucht der Worker die gespeicherte Normaldarstellung
 unter /AP /N mit eigenem Grafikzustand und eigenen Ressourcen. Eine
@@ -458,6 +473,12 @@ transparente Stempel und für die inaktive Normaldarstellung einer
 Schaltfläche. Bei fehlendem oder ungültigem /AS prüfte die Referenz auch die
 übrigen Zustände und meldete im Test fehlende Seitenkalibrierung. Der lokale
 Worker lässt die Transparenzprüfung dieser Darstellung in dem Fall offen.
+Die Transferfunktionsfälle prüfen gültige Standardwerte, indirekte Parameter,
+Clipping-Intervalle, Exponenten und gezielt beschädigte Definitionen. veraPDF
+1.30.2 akzeptierte alle 45 Fälle für Profil 3b, darunter auch fehlendes /N,
+mehrere Ein- oder Ausgänge und unzulässige Kombinationen von Exponent und
+Domain. Die neuen Strukturbefunde beruhen auf den Anforderungen aus
+ISO 32000-1, Abschnitten 7.10.1 und 7.10.3 sowie Tabelle 144.
 
 Die Datei tests/fixtures/verapdf-3b-6-8-t02-pass-a.pdf stammt aus dem
 [veraPDF-Testkorpus](https://github.com/veraPDF/veraPDF-corpus/blob/bb75f4f0073d9350dfd058c0162a367e6fadf25e/PDF_A-3b/6.8%20Embedded%20files/veraPDF%20test%20suite%206-8-t02-pass-a.pdf)
